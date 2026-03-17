@@ -1,0 +1,115 @@
+[
+  {
+    "id": "char-rin",
+    "name": "Rin",
+    "appearance": "short silver hair, tired amber eyes, slim build",
+    "wardrobe": "oversized black coat, white shirt, dark slacks",
+    "personality": "guarded, observant, emotionally restrained",
+    "negativePrompt": "extra limbs, wrong hairstyle, bright cheerful smile",
+    "referenceNotes": "Persisted note from test",
+    "references": [
+      {
+        "id": "ref-rin-front",
+        "label": "Front portrait",
+        "url": "https://example.invalid/rin-front.png",
+        "angle": "front",
+        "notes": "Primary face and hair reference."
+      },
+      {
+        "id": "ref-rin-full",
+        "label": "Full body",
+        "url": "https://example.invalid/rin-full.png",
+        "angle": "full-body",
+        "notes": "Use for coat silhouette and body proportions."
+      }
+    ],
+    "consistency": {
+      "anchorFeatures": [
+        "silver bob cut",
+        "amber eyes",
+        "oversized black coat"
+      ],
+      "forbiddenDrift": [
+        "blue eyes",
+        "long hair",
+        "cheerful idol styling"
+      ],
+      "paletteHints": [
+        "graphite",
+        "off-white",
+        "rain sheen"
+      ],
+      "expressionDefaults": [
+        "guarded",
+        "tired",
+        "quietly tense"
+      ],
+      "bodyShape": "slim and understated"
+    },
+    "adapter": {
+      "provider": "ip-adapter",
+      "enabled": true,
+      "weight": 0.81,
+      "referenceImageIds": [
+        "ref-rin-front"
+      ]
+    }
+  },
+  {
+    "id": "char-kai",
+    "name": "Kai",
+    "appearance": "dark undercut, rectangular glasses, tall frame",
+    "wardrobe": "olive utility jacket, messenger bag, rolled sleeves",
+    "personality": "analytical, calm, dry sense of humor",
+    "negativePrompt": "fantasy armor, long hair, bodybuilder proportions",
+    "referenceNotes": "Glasses and messenger bag are identity anchors.",
+    "references": [
+      {
+        "id": "ref-kai-front",
+        "label": "Front portrait",
+        "url": "https://example.invalid/kai-front.png",
+        "angle": "front",
+        "notes": "Primary glasses and facial proportion reference."
+      },
+      {
+        "id": "ref-71c99a26",
+        "label": "Kai Slot 2",
+        "url": "/static/character-references/ref-71c99a26.png",
+        "angle": "front",
+        "notes": "slot2 test"
+      }
+    ],
+    "consistency": {
+      "anchorFeatures": [
+        "rectangular glasses",
+        "dark undercut",
+        "olive jacket"
+      ],
+      "forbiddenDrift": [
+        "round glasses",
+        "long fringe",
+        "heroic fantasy styling"
+      ],
+      "paletteHints": [
+        "olive",
+        "smoke gray",
+        "paper beige"
+      ],
+      "expressionDefaults": [
+        "calm",
+        "dry amusement",
+        "focused"
+      ],
+      "bodyShape": "tall and lean"
+    },
+    "adapter": {
+      "provider": "instantid",
+      "enabled": true,
+      "weight": 0.68,
+      "referenceImageIds": [
+        "ref-kai-front",
+        "ref-71c99a26"
+      ]
+    }
+  }
+]

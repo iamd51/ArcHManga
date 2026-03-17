@@ -1,0 +1,175 @@
+import type {
+  CharacterProfile,
+  ComicProject,
+  ComicPanel,
+  GenerationJobState,
+  PromptPreview,
+  WorkflowPreset
+} from "@archmanga/shared";
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000/api";
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    ...init,
+    headers: {
+      "Content-Type": "application/json",
+      ...(init?.headers ?? {})
+    },
+    cache: "no-store"
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text || `Request failed: ${response.status}`);
+  }
+
+  return response.json() as Promise<T>;
+}
+
+export function fetchBootstrapProject() {
+  return request<ComicProject>("/projects/bootstrap");
+}
+
+export function fetchModels() {
+  return request("/models");
+}
+
+export function fetchWorkflows() {
+  return request("/workflows");
+}
+
+export function importWorkflowPreset(payload: {
+  name: string;
+  description: string;
+  mode: "bw" | "color";
+  promptPrefix: string;
+  templateKey: "sdxl_text2img" | "sdxl_manga" | "sdxl_color_story";
+  workflowJson: Record<string, unknown>;
+}) {
+  return request<WorkflowPreset>("/workflows/import", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export function updateWorkflowPreset(
+  workflowId: string,
+  payload: {
+    promptPrefix?: string;
+    nodeBindings?: WorkflowPreset["nodeBindings"];
+  }
+) {
+  return request<WorkflowPreset>(`/workflows/${workflowId}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function uploadCharacterReference(payload: {
+  characterId: string;
+  file: File;
+  label: string;
+  angle: string;
+  notes: string;
+}) {
+  const formData = new FormData();
+  formData.append("file", payload.file);
+  formData.append("label", payload.label);
+  formData.append("angle", payload.angle);
+  formData.append("notes", payload.notes);
+
+  const response = await fetch(`${API_BASE_URL}/characters/${payload.characterId}/references`, {
+    method: "POST",
+    body: formData
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text || `Upload failed: ${response.status}`);
+  }
+
+  return response.json() as Promise<{
+    characterId: string;
+    reference: CharacterProfile["references"][number];
+  }>;
+}
+
+export function updateCharacterProfile(
+  characterId: string,
+  payload: Partial<
+    Pick<CharacterProfile, "referenceNotes" | "negativePrompt" | "consistency" | "adapter">
+  >
+) {
+  return request<CharacterProfile>(`/characters/${characterId}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload)
+  });
+}
+
+export function updateSceneMemory(
+  sceneMemoryId: string,
+  payload: Partial<
+    Pick<
+      ComicProject["sceneMemories"][number],
+      "location" | "timeOfDay" | "weather" | "lighting" | "mood" | "continuityNotes"
+    >
+  >
+) {
+  return request<ComicProject["sceneMemories"][number]>(`/scene-memories/${sceneMemoryId}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload)
+  });
+}
+
+export function createPromptPreview(payload: {
+  panel: ComicPanel;
+  workflow: WorkflowPreset | undefined;
+  characters: CharacterProfile[];
+}) {
+  return request<PromptPreview>("/generation/prompt-preview", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export function createContinuityDraft(payload: {
+  currentPanel: ComicPanel;
+  previousPanel?: ComicPanel;
+  currentSceneMemory?: ComicProject["sceneMemories"][number];
+  previousSceneMemory?: ComicProject["sceneMemories"][number];
+  characters: CharacterProfile[];
+}) {
+  return request<{
+    prompt: string;
+    sceneSummary: string;
+    shotType: string;
+    styleNotes: string;
+    continuityHints: string[];
+  }>("/generation/continuity-draft", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export function createGenerationJob(payload: {
+  projectId: string;
+  pageId: string;
+  panel: ComicPanel;
+  workflow: WorkflowPreset;
+  characters: CharacterProfile[];
+}) {
+  return request<{
+    jobId: string;
+    status: string;
+    promptPreview: PromptPreview;
+    workflowPayload: Record<string, unknown>;
+  }>("/generation/jobs", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export function fetchGenerationJob(jobId: string) {
+  return request<GenerationJobState>(`/generation/jobs/${jobId}`);
+}

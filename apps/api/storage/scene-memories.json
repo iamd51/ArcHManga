@@ -1,0 +1,11 @@
+[
+  {
+    "id": "scene-rain-alley",
+    "location": "Persisted Rain Alley",
+    "timeOfDay": "late night",
+    "weather": "heavy rain",
+    "lighting": "cyan and amber reflections on wet asphalt",
+    "mood": "tense and emotionally distant",
+    "continuityNotes": "Keep the puddle reflections and sparse foot traffic."
+  }
+]

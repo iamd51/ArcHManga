@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "archmanga-api"
+version = "0.1.0"
+description = "FastAPI orchestration layer for the ArcHManga editor"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.115.8",
+  "httpx>=0.28.1",
+  "pydantic-settings>=2.8.1",
+  "python-multipart>=0.0.20",
+  "uvicorn>=0.34.0"
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]

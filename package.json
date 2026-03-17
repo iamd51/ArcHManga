@@ -1,0 +1,14 @@
+{
+  "name": "archmanga",
+  "private": true,
+  "packageManager": "npm@10.9.2",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:web": "npm run dev --workspace @archmanga/web",
+    "build:web": "npm run build --workspace @archmanga/web",
+    "lint:web": "npm run lint --workspace @archmanga/web"
+  }
+}

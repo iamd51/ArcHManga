@@ -1,0 +1,146 @@
+{
+  "id": "wf-9480b1e7",
+  "name": "Slot Mapping Workflow",
+  "description": "Slot mapping test",
+  "mode": "color",
+  "modelFamily": "sdxl",
+  "promptPrefix": "slot mapping",
+  "controls": [
+    "ip-adapter"
+  ],
+  "templateKey": "sdxl_text2img",
+  "parameters": [
+    {
+      "key": "steps",
+      "label": "Steps",
+      "type": "number",
+      "defaultValue": 28,
+      "options": []
+    },
+    {
+      "key": "cfg",
+      "label": "CFG",
+      "type": "number",
+      "defaultValue": 6.5,
+      "options": []
+    },
+    {
+      "key": "sampler",
+      "label": "Sampler",
+      "type": "select",
+      "defaultValue": "euler",
+      "options": [
+        "euler",
+        "dpmpp_2m",
+        "dpmpp_sde"
+      ]
+    }
+  ],
+  "nodeBindings": [
+    {
+      "id": "model",
+      "nodeId": "1",
+      "inputName": "ckpt_name",
+      "source": "model",
+      "provider": "generic",
+      "characterIndex": 0,
+      "label": null
+    },
+    {
+      "id": "pos",
+      "nodeId": "2",
+      "inputName": "text",
+      "source": "positive_prompt",
+      "provider": "generic",
+      "characterIndex": 0,
+      "label": null
+    },
+    {
+      "id": "neg",
+      "nodeId": "3",
+      "inputName": "text",
+      "source": "negative_prompt",
+      "provider": "generic",
+      "characterIndex": 0,
+      "label": null
+    },
+    {
+      "id": "ref2",
+      "nodeId": "4",
+      "inputName": "image",
+      "source": "reference_image_url",
+      "provider": "ip-adapter",
+      "characterIndex": 1,
+      "label": "Second character ref"
+    },
+    {
+      "id": "weight2",
+      "nodeId": "4",
+      "inputName": "weight",
+      "source": "adapter_weight",
+      "provider": "ip-adapter",
+      "characterIndex": 1,
+      "label": "Second character weight"
+    },
+    {
+      "id": "seed",
+      "nodeId": "5",
+      "inputName": "seed",
+      "source": "seed",
+      "provider": "generic",
+      "characterIndex": 0,
+      "label": null
+    }
+  ],
+  "workflowJson": {
+    "1": {
+      "class_type": "CheckpointLoaderSimple",
+      "inputs": {
+        "ckpt_name": "demo.safetensors"
+      }
+    },
+    "2": {
+      "class_type": "CLIPTextEncode",
+      "inputs": {
+        "text": "",
+        "clip": [
+          "1",
+          1
+        ]
+      }
+    },
+    "3": {
+      "class_type": "CLIPTextEncode",
+      "inputs": {
+        "text": "",
+        "clip": [
+          "1",
+          1
+        ]
+      }
+    },
+    "4": {
+      "class_type": "IPAdapterApply",
+      "inputs": {
+        "image": "",
+        "weight": 0.0
+      }
+    },
+    "5": {
+      "class_type": "KSampler",
+      "inputs": {
+        "steps": 20,
+        "cfg": 6,
+        "sampler_name": "euler",
+        "scheduler": "normal",
+        "seed": 1
+      }
+    },
+    "6": {
+      "class_type": "SaveImage",
+      "inputs": {
+        "filename_prefix": "tmp"
+      }
+    }
+  }
+}
