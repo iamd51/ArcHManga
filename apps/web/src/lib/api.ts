@@ -4,6 +4,7 @@ import type {
   ComicPanel,
   GenerationJobState,
   PromptPreview,
+  WorkflowValidationResult,
   WorkflowPreset
 } from "@archmanga/shared";
 
@@ -32,7 +33,41 @@ export function fetchBootstrapProject() {
 }
 
 export function fetchModels() {
-  return request("/models");
+  return request<ComicProject["models"]>("/models");
+}
+
+export function syncModels() {
+  return request<ComicProject["models"]>("/models/sync", {
+    method: "POST"
+  });
+}
+
+export function fetchComfyStatus() {
+  return request<{
+    connected: boolean;
+    baseUrl: string;
+    availableEndpoints: string[];
+    modelCounts: Record<string, number>;
+    detail: string;
+  }>("/comfy/status");
+}
+
+export function fetchComfyQueue() {
+  return request<{
+    runningCount: number;
+    pendingCount: number;
+    runningPromptIds: string[];
+    pendingPromptIds: string[];
+    detail: string;
+  }>("/comfy/queue");
+}
+
+export function fetchComfyObjectInfoSummary() {
+  return request<{
+    nodeCount: number;
+    nodeNames: string[];
+    sampleInputs: Record<string, string[]>;
+  }>("/comfy/object-info-summary");
 }
 
 export function fetchWorkflows() {
@@ -48,6 +83,16 @@ export function importWorkflowPreset(payload: {
   workflowJson: Record<string, unknown>;
 }) {
   return request<WorkflowPreset>("/workflows/import", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export function validateWorkflowPreset(payload: {
+  workflowJson: Record<string, unknown>;
+  nodeBindings?: WorkflowPreset["nodeBindings"];
+}) {
+  return request<WorkflowValidationResult>("/workflows/validate", {
     method: "POST",
     body: JSON.stringify(payload)
   });
@@ -172,4 +217,14 @@ export function createGenerationJob(payload: {
 
 export function fetchGenerationJob(jobId: string) {
   return request<GenerationJobState>(`/generation/jobs/${jobId}`);
+}
+
+export function cancelGenerationJob(jobId: string) {
+  return request<{
+    jobId: string;
+    status: string;
+    detail: string;
+  }>(`/generation/jobs/${jobId}/cancel`, {
+    method: "POST"
+  });
 }

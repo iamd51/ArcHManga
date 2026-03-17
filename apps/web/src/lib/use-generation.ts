@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  cancelGenerationJob,
   createContinuityDraft,
   createGenerationJob,
   createPromptPreview,
@@ -102,6 +103,28 @@ export function useGenerationActions() {
     }
   });
 
+  const cancelGenerationMutation = useMutation({
+    mutationFn: async () => {
+      if (!activeJob?.jobId) {
+        throw new Error("No active job.");
+      }
+      return cancelGenerationJob(activeJob.jobId);
+    },
+    onSuccess: (result) => {
+      if (activeJob?.panelId) {
+        setPanelJobStatus(activeJob.panelId, "failed");
+      }
+      setActiveJob({
+        ...(activeJob ?? {
+          jobId: result.jobId,
+          imageUrls: []
+        }),
+        status: result.status as "cancelled",
+        detail: result.detail
+      });
+    }
+  });
+
   const continuityDraftMutation = useMutation({
     mutationFn: async () => {
       if (!selectedPanel) {
@@ -139,7 +162,9 @@ export function useGenerationActions() {
     enabled: Boolean(activeJob?.jobId),
     refetchInterval: (query) => {
       const status = query.state.data?.status;
-      return status === "complete" || status === "failed" || status === "missing" ? false : 1500;
+      return status === "complete" || status === "failed" || status === "missing" || status === "cancelled"
+        ? false
+        : 1500;
     }
   });
 
@@ -162,11 +187,15 @@ export function useGenerationActions() {
     if (job.status === "failed" || job.status === "missing") {
       setPanelJobStatus(job.panelId, "failed");
     }
+    if (job.status === "cancelled") {
+      setPanelJobStatus(job.panelId, "failed");
+    }
   }, [jobQuery.data, setActiveJob, setPanelImage, setPanelJobStatus]);
 
   return {
     promptPreviewMutation,
     generationMutation,
+    cancelGenerationMutation,
     continuityDraftMutation,
     jobQuery
   };

@@ -2,6 +2,7 @@ from uuid import uuid4
 
 from app.schemas.comic import CharacterProfile
 from app.schemas.generation import (
+    GenerationCancelResponse,
     GenerationJobRequest,
     GenerationJobResponse,
     GenerationJobStatus,
@@ -88,6 +89,33 @@ class GenerationOrchestrator:
                 job.detail = "Waiting for ComfyUI outputs."
         return job
 
+    async def cancel_job(self, job_id: str) -> GenerationCancelResponse:
+        entry = self.jobs.get(job_id)
+        if entry is None:
+            return GenerationCancelResponse(
+                job_id=job_id,
+                status="missing",
+                detail="Unknown job id.",
+            )
+
+        job = entry["job"]
+        if entry["mock"]:
+            job.status = "cancelled"
+            job.detail = "Mock job cancelled."
+            return GenerationCancelResponse(job_id=job_id, status="cancelled", detail=job.detail)
+
+        interrupted = await comfyui_service.interrupt()
+        if interrupted:
+            job.status = "cancelled"
+            job.detail = "Interrupt sent to ComfyUI."
+            return GenerationCancelResponse(job_id=job_id, status="cancelled", detail=job.detail)
+
+        return GenerationCancelResponse(
+            job_id=job_id,
+            status="failed",
+            detail="Failed to interrupt ComfyUI.",
+        )
+
     def _collect_history_images(self, outputs: dict) -> list[str]:
         image_urls: list[str] = []
         for output in outputs.values():
@@ -96,9 +124,7 @@ class GenerationOrchestrator:
                 subfolder = image.get("subfolder", "")
                 image_type = image.get("type", "output")
                 if filename:
-                    image_urls.append(
-                        f"/view?filename={filename}&subfolder={subfolder}&type={image_type}"
-                    )
+                    image_urls.append(comfyui_service.build_view_url(filename, subfolder, image_type))
         return image_urls
 
     def _mock_image(self, panel_id: str) -> str:

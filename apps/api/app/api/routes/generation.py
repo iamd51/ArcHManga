@@ -3,6 +3,7 @@ from fastapi import APIRouter
 from app.schemas.generation import (
     ContinuityDraftRequest,
     ContinuityDraftResponse,
+    GenerationCancelResponse,
     GenerationJobRequest,
     GenerationJobResponse,
     GenerationJobStatus,
@@ -33,3 +34,8 @@ async def create_generation_job(payload: GenerationJobRequest) -> GenerationJobR
 @router.get("/generation/jobs/{job_id}", response_model=GenerationJobStatus)
 async def get_generation_job(job_id: str) -> GenerationJobStatus:
     return await generation_orchestrator.get_job(job_id)
+
+
+@router.post("/generation/jobs/{job_id}/cancel", response_model=GenerationCancelResponse)
+async def cancel_generation_job(job_id: str) -> GenerationCancelResponse:
+    return await generation_orchestrator.cancel_job(job_id)

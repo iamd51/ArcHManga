@@ -56,3 +56,9 @@ class GenerationJobStatus(ApiModel):
     prompt_id: str | None = None
     image_urls: list[str] = Field(default_factory=list)
     detail: str = ""
+
+
+class GenerationCancelResponse(ApiModel):
+    job_id: str
+    status: str
+    detail: str

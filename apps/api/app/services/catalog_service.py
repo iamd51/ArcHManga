@@ -12,12 +12,12 @@ from app.schemas.comic import (
     SceneMemory,
     SceneMemoryUpdateRequest,
     WorkflowImportRequest,
-    WorkflowNodeBinding,
     WorkflowParameter,
     WorkflowPreset,
     WorkflowUpdateRequest,
 )
 from app.services.mock_data import get_mock_project
+from app.services.workflow_introspection import detect_controls, guess_bindings
 
 
 class CatalogService:
@@ -40,6 +40,11 @@ class CatalogService:
     def list_models(self):
         return deepcopy(self.project.models)
 
+    def sync_models(self, models: list) -> list:
+        if models:
+            self.project.models = models
+        return deepcopy(self.project.models)
+
     def list_workflows(self):
         return deepcopy(self.project.workflows)
 
@@ -51,7 +56,7 @@ class CatalogService:
             mode=payload.mode,
             prompt_prefix=payload.prompt_prefix,
             template_key=payload.template_key,
-            controls=self._detect_controls(payload.workflow_json),
+            controls=detect_controls(payload.workflow_json),
             parameters=[
                 WorkflowParameter(key="steps", label="Steps", type="number", default_value=28),
                 WorkflowParameter(key="cfg", label="CFG", type="number", default_value=6.5),
@@ -63,7 +68,7 @@ class CatalogService:
                     options=["euler", "dpmpp_2m", "dpmpp_sde"],
                 ),
             ],
-            node_bindings=self._guess_bindings(payload.workflow_json),
+            node_bindings=guess_bindings(payload.workflow_json),
             workflow_json=payload.workflow_json,
         )
         self.project.workflows.append(workflow)
@@ -154,105 +159,6 @@ class CatalogService:
 
         self._save_scene_memories()
         return scene_memory
-
-    def _detect_controls(self, workflow_json: dict) -> list[str]:
-        names = " ".join(
-            str(node.get("class_type", "")).lower() for node in workflow_json.values() if isinstance(node, dict)
-        )
-        controls = []
-        if "ipadapter" in names or "ip_adapter" in names:
-            controls.append("ip-adapter")
-        if "instantid" in names:
-            controls.append("instantid")
-        if "controlnet" in names:
-            controls.append("controlnet")
-        if "vae" in names:
-            controls.append("vae")
-        return controls or ["custom-workflow"]
-
-    def _guess_bindings(self, workflow_json: dict) -> list[WorkflowNodeBinding]:
-        bindings: list[WorkflowNodeBinding] = []
-        for node_id, node in workflow_json.items():
-            if not isinstance(node, dict):
-                continue
-            class_type = str(node.get("class_type", "")).lower()
-            inputs = node.get("inputs", {})
-            if "checkpoint" in class_type and "ckpt_name" in inputs:
-                bindings.append(
-                    WorkflowNodeBinding(
-                        id=f"{node_id}-ckpt_name",
-                        node_id=node_id,
-                        input_name="ckpt_name",
-                        source="model",
-                    )
-                )
-            if "cliptextencode" in class_type and "text" in inputs:
-                source = "positive_prompt" if not bindings or all(
-                    item.source != "positive_prompt" for item in bindings
-                ) else "negative_prompt"
-                bindings.append(
-                    WorkflowNodeBinding(
-                        id=f"{node_id}-text-{source}",
-                        node_id=node_id,
-                        input_name="text",
-                        source=source,
-                    )
-                )
-            if "emptylatentimage" in class_type:
-                if "width" in inputs:
-                    bindings.append(
-                        WorkflowNodeBinding(
-                            id=f"{node_id}-width",
-                            node_id=node_id,
-                            input_name="width",
-                            source="width",
-                        )
-                    )
-                if "height" in inputs:
-                    bindings.append(
-                        WorkflowNodeBinding(
-                            id=f"{node_id}-height",
-                            node_id=node_id,
-                            input_name="height",
-                            source="height",
-                        )
-                    )
-            if "ksampler" in class_type:
-                for input_name, source in [
-                    ("steps", "steps"),
-                    ("cfg", "cfg"),
-                    ("sampler_name", "sampler"),
-                    ("scheduler", "scheduler"),
-                    ("seed", "seed"),
-                ]:
-                    if input_name in inputs:
-                        bindings.append(
-                            WorkflowNodeBinding(
-                                id=f"{node_id}-{input_name}",
-                                node_id=node_id,
-                                input_name=input_name,
-                                source=source,
-                            )
-                        )
-            if "ipadapter" in class_type or "ip_adapter" in class_type or "instantid" in class_type:
-                for input_name, source in [
-                    ("image", "reference_image_url"),
-                    ("weight", "adapter_weight"),
-                    ("weight_faceidv2", "adapter_weight"),
-                ]:
-                    if input_name in inputs:
-                        provider = "instantid" if "instantid" in class_type else "ip-adapter"
-                        bindings.append(
-                            WorkflowNodeBinding(
-                                id=f"{node_id}-{input_name}",
-                                node_id=node_id,
-                                input_name=input_name,
-                                source=source,
-                                provider=provider,
-                                character_index=0,
-                            )
-                        )
-        return bindings
 
     def _workflow_snapshot_path(self, workflow_id: str) -> Path:
         return self.workflow_dir / f"{workflow_id}.json"

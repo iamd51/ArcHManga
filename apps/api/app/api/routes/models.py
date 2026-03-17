@@ -4,14 +4,21 @@ from app.schemas.comic import (
     CharacterProfile,
     CharacterReferenceUploadResponse,
     CharacterUpdateRequest,
+    ComfyObjectInfoSummary,
+    ComfyQueue,
+    ComfyStatus,
     ModelOption,
     SceneMemory,
     SceneMemoryUpdateRequest,
     WorkflowImportRequest,
     WorkflowPreset,
+    WorkflowValidationRequest,
+    WorkflowValidationResponse,
     WorkflowUpdateRequest,
 )
 from app.services.catalog_service import catalog_service
+from app.services.comfyui_service import comfyui_service
+from app.services.workflow_validator import validate_workflow
 
 router = APIRouter()
 
@@ -19,6 +26,27 @@ router = APIRouter()
 @router.get("/models", response_model=list[ModelOption])
 async def list_models() -> list[ModelOption]:
     return catalog_service.list_models()
+
+
+@router.post("/models/sync", response_model=list[ModelOption])
+async def sync_models() -> list[ModelOption]:
+    synced_models = await comfyui_service.get_available_models()
+    return catalog_service.sync_models(synced_models)
+
+
+@router.get("/comfy/status", response_model=ComfyStatus)
+async def comfy_status() -> ComfyStatus:
+    return await comfyui_service.get_status()
+
+
+@router.get("/comfy/queue", response_model=ComfyQueue)
+async def comfy_queue() -> ComfyQueue:
+    return await comfyui_service.get_queue()
+
+
+@router.get("/comfy/object-info-summary", response_model=ComfyObjectInfoSummary)
+async def comfy_object_info_summary() -> ComfyObjectInfoSummary:
+    return await comfyui_service.get_object_info_summary()
 
 
 @router.get("/workflows", response_model=list[WorkflowPreset])
@@ -29,6 +57,14 @@ async def list_workflows() -> list[WorkflowPreset]:
 @router.post("/workflows/import", response_model=WorkflowPreset)
 async def import_workflow(payload: WorkflowImportRequest) -> WorkflowPreset:
     return catalog_service.import_workflow(payload)
+
+
+@router.post("/workflows/validate", response_model=WorkflowValidationResponse)
+async def validate_workflow_payload(
+    payload: WorkflowValidationRequest,
+) -> WorkflowValidationResponse:
+    object_info = await comfyui_service.get_object_info()
+    return validate_workflow(payload.workflow_json, object_info, payload.node_bindings)
 
 
 @router.patch("/workflows/{workflow_id}", response_model=WorkflowPreset)

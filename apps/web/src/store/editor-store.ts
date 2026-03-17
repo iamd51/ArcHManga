@@ -39,6 +39,7 @@ interface EditorState {
     updates: Partial<ComicProject["sceneMemories"][number]>
   ) => void;
   replaceSceneMemory: (sceneMemory: ComicProject["sceneMemories"][number]) => void;
+  replaceModels: (models: ComicProject["models"]) => void;
   addPanel: () => void;
   duplicateSelectedPanel: () => void;
   setPromptPreview: (preview: PromptPreview | null) => void;
@@ -267,6 +268,13 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         sceneMemories: state.project.sceneMemories.map((sceneMemory) =>
           sceneMemory.id === nextSceneMemory.id ? nextSceneMemory : sceneMemory
         )
+      }
+    })),
+  replaceModels: (models) =>
+    set((state) => ({
+      project: {
+        ...state.project,
+        models
       }
     })),
   addPanel: () => {

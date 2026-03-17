@@ -54,6 +54,40 @@ export interface WorkflowPreset {
   workflowJson: Record<string, { class_type?: string; inputs?: Record<string, unknown> }>;
 }
 
+export interface WorkflowNodeSummary {
+  nodeId: string;
+  nodeType: string;
+  inputNames: string[];
+}
+
+export interface WorkflowValidationIssue {
+  level: "error" | "warning";
+  code: string;
+  message: string;
+  nodeId?: string;
+  nodeType?: string;
+  inputName?: string;
+}
+
+export interface WorkflowValidationSummary {
+  errorCount: number;
+  warningCount: number;
+  unknownNodeTypes: string[];
+  missingCustomNodes: string[];
+  mappedSources: string[];
+  unmappedRecommendedSources: string[];
+}
+
+export interface WorkflowValidationResult {
+  valid: boolean;
+  issues: WorkflowValidationIssue[];
+  summary: WorkflowValidationSummary;
+  recommendedBindings: WorkflowPreset["nodeBindings"];
+  detectedNodes: WorkflowNodeSummary[];
+  checkedNodes: number;
+  checkedBindings: number;
+}
+
 export interface CharacterReferenceImage {
   id: string;
   label: string;
@@ -173,7 +207,7 @@ export interface PromptPreview {
 
 export interface GenerationJobState {
   jobId: string;
-  status: "queued" | "running" | "complete" | "failed" | "missing";
+  status: "queued" | "running" | "complete" | "failed" | "missing" | "cancelled";
   panelId?: string;
   promptId?: string;
   imageUrls: string[];

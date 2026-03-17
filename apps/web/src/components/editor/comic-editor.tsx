@@ -23,7 +23,8 @@ export function ComicEditor() {
   const duplicateSelectedPanel = useEditorStore((state) => state.duplicateSelectedPanel);
   const page = useCurrentPage();
   const bootstrapProject = useBootstrapProject();
-  const { continuityDraftMutation, generationMutation, promptPreviewMutation } = useGenerationActions();
+  const { cancelGenerationMutation, continuityDraftMutation, generationMutation, promptPreviewMutation } =
+    useGenerationActions();
 
   return (
     <main className="app-shell">
@@ -50,6 +51,14 @@ export function ComicEditor() {
             </button>
             <button className="button" type="button" onClick={addPanel}>
               Add free panel
+            </button>
+            <button
+              className="button subtle"
+              type="button"
+              disabled={!activeJob?.jobId || cancelGenerationMutation.isPending}
+              onClick={() => cancelGenerationMutation.mutate()}
+            >
+              {cancelGenerationMutation.isPending ? "Cancelling..." : "Cancel active job"}
             </button>
             <button
               className="button primary"

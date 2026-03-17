@@ -29,6 +29,28 @@ class ModelOption(ApiModel):
     tags: list[str] = Field(default_factory=list)
 
 
+class ComfyStatus(ApiModel):
+    connected: bool
+    base_url: str
+    available_endpoints: list[str] = Field(default_factory=list)
+    model_counts: dict[str, int] = Field(default_factory=dict)
+    detail: str = ""
+
+
+class ComfyQueue(ApiModel):
+    running_count: int = 0
+    pending_count: int = 0
+    running_prompt_ids: list[str] = Field(default_factory=list)
+    pending_prompt_ids: list[str] = Field(default_factory=list)
+    detail: str = ""
+
+
+class ComfyObjectInfoSummary(ApiModel):
+    node_count: int = 0
+    node_names: list[str] = Field(default_factory=list)
+    sample_inputs: dict[str, list[str]] = Field(default_factory=dict)
+
+
 class WorkflowPreset(ApiModel):
     id: str
     name: str
@@ -181,6 +203,45 @@ class WorkflowImportRequest(ApiModel):
 class WorkflowUpdateRequest(ApiModel):
     prompt_prefix: str | None = None
     node_bindings: list[WorkflowNodeBinding] | None = None
+
+
+class WorkflowNodeSummary(ApiModel):
+    node_id: str
+    node_type: str
+    input_names: list[str] = Field(default_factory=list)
+
+
+class WorkflowValidationIssue(ApiModel):
+    level: str
+    code: str
+    message: str
+    node_id: str | None = None
+    node_type: str | None = None
+    input_name: str | None = None
+
+
+class WorkflowValidationSummary(ApiModel):
+    error_count: int = 0
+    warning_count: int = 0
+    unknown_node_types: list[str] = Field(default_factory=list)
+    missing_custom_nodes: list[str] = Field(default_factory=list)
+    mapped_sources: list[str] = Field(default_factory=list)
+    unmapped_recommended_sources: list[str] = Field(default_factory=list)
+
+
+class WorkflowValidationRequest(ApiModel):
+    workflow_json: dict
+    node_bindings: list[WorkflowNodeBinding] = Field(default_factory=list)
+
+
+class WorkflowValidationResponse(ApiModel):
+    valid: bool
+    issues: list[WorkflowValidationIssue] = Field(default_factory=list)
+    summary: WorkflowValidationSummary = Field(default_factory=WorkflowValidationSummary)
+    recommended_bindings: list[WorkflowNodeBinding] = Field(default_factory=list)
+    detected_nodes: list[WorkflowNodeSummary] = Field(default_factory=list)
+    checked_nodes: int = 0
+    checked_bindings: int = 0
 
 
 class CharacterReferenceUploadResponse(ApiModel):

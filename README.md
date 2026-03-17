@@ -30,6 +30,10 @@ The workspace already includes:
 - workflow mapping can target multi-character slots such as slot 1 / slot 2 for adapter inputs
 - scene memory can be edited and persisted independently of panel prompts
 - default SDXL workflow presets now include adapter nodes that receive reference image and weight bindings
+- the editor can poll ComfyUI status and sync real model lists from a running ComfyUI server
+- the editor can inspect ComfyUI queue state, sample node info, and cancel the active generation job
+- imported or selected workflows can be validated against live ComfyUI `object_info` before use
+- workflow validation now reports unknown node types, missing custom nodes, and recommended binding gaps
 - FastAPI endpoints for bootstrap project data, prompt preview, generation submit, and job polling
 - a mock ComfyUI completion path so the end-to-end UX can be tested before a real worker is connected
 
@@ -100,3 +104,6 @@ Verified locally in this workspace:
 - character profile persistence and multi-character slot mapping via `TestClient`
 - scene memory persistence and default adapter-node payload binding via `TestClient`
 - continuity draft endpoint plus previous-panel carryover via `TestClient`
+- ComfyUI status and model sync routes via `TestClient`
+- ComfyUI queue/object-info routes and generation cancel flow via `TestClient`
+- workflow validation against sample `object_info`, recommended mappings, and missing custom nodes via `TestClient`
