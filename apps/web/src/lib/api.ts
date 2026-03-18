@@ -32,6 +32,17 @@ export function fetchBootstrapProject() {
   return request<ComicProject>("/projects/bootstrap");
 }
 
+export function fetchProject(projectId: string) {
+  return request<ComicProject>(`/projects/${projectId}`);
+}
+
+export function saveProject(project: ComicProject) {
+  return request<ComicProject>(`/projects/${project.id}`, {
+    method: "PUT",
+    body: JSON.stringify(project)
+  });
+}
+
 export function fetchModels() {
   return request<ComicProject["models"]>("/models");
 }
@@ -115,12 +126,14 @@ export async function uploadCharacterReference(payload: {
   characterId: string;
   file: File;
   label: string;
+  role: CharacterProfile["references"][number]["role"];
   angle: string;
   notes: string;
 }) {
   const formData = new FormData();
   formData.append("file", payload.file);
   formData.append("label", payload.label);
+  formData.append("role", payload.role);
   formData.append("angle", payload.angle);
   formData.append("notes", payload.notes);
 
@@ -138,6 +151,23 @@ export async function uploadCharacterReference(payload: {
     characterId: string;
     reference: CharacterProfile["references"][number];
   }>;
+}
+
+export function updateCharacterReference(
+  characterId: string,
+  referenceId: string,
+  payload: Partial<Pick<CharacterProfile["references"][number], "label" | "role" | "angle" | "notes">>
+) {
+  return request<CharacterProfile>(`/characters/${characterId}/references/${referenceId}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload)
+  });
+}
+
+export function deleteCharacterReference(characterId: string, referenceId: string) {
+  return request<CharacterProfile>(`/characters/${characterId}/references/${referenceId}`, {
+    method: "DELETE"
+  });
 }
 
 export function updateCharacterProfile(

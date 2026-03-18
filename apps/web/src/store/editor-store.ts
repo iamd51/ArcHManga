@@ -3,6 +3,7 @@
 import { create } from "zustand";
 import type {
   CharacterProfile,
+  ComicPage,
   ComicPageTemplate,
   ComicPanel,
   ComicProject,
@@ -19,7 +20,11 @@ interface EditorState {
   selectedPanelId: string | null;
   activeJob: GenerationJobState | null;
   promptPreview: PromptPreview | null;
+  isDirty: boolean;
+  lastSavedAt: string | null;
   hydrateProject: (project: ComicProject) => void;
+  markProjectSaved: (project: ComicProject) => void;
+  setSelectedPageId: (pageId: string) => void;
   applyTemplate: (template: ComicPageTemplate) => void;
   selectPanel: (panelId: string | null) => void;
   updatePanelFrame: (panelId: string, frame: Partial<ComicPanel>) => void;
@@ -40,6 +45,8 @@ interface EditorState {
   ) => void;
   replaceSceneMemory: (sceneMemory: ComicProject["sceneMemories"][number]) => void;
   replaceModels: (models: ComicProject["models"]) => void;
+  addPage: () => void;
+  duplicateCurrentPage: () => void;
   addPanel: () => void;
   duplicateSelectedPanel: () => void;
   setPromptPreview: (preview: PromptPreview | null) => void;
@@ -52,6 +59,18 @@ interface EditorState {
     characterId: string,
     reference: CharacterProfile["references"][number]
   ) => void;
+  updateCharacterReference: (
+    characterId: string,
+    referenceId: string,
+    updates: Partial<CharacterProfile["references"][number]>
+  ) => void;
+  removeCharacterReference: (characterId: string, referenceId: string) => void;
+  toggleCharacterAdapterReference: (
+    characterId: string,
+    referenceId: string,
+    enabled: boolean
+  ) => void;
+  setCharacterPrimaryReference: (characterId: string, referenceId: string) => void;
   updateCharacterAdapter: (
     characterId: string,
     updates: Partial<CharacterProfile["adapter"]>
@@ -112,6 +131,10 @@ function createPanelId() {
   return `panel-${Math.random().toString(36).slice(2, 9)}`;
 }
 
+function createPageId() {
+  return `page-${Math.random().toString(36).slice(2, 9)}`;
+}
+
 function buildNewPanel(project: ComicProject, panelsLength: number, mode: GenerationMode): ComicPanel {
   const workflow = getDefaultWorkflow(project, mode);
   const model = getDefaultModel(project, mode);
@@ -154,17 +177,61 @@ function buildNewPanel(project: ComicProject, panelsLength: number, mode: Genera
   };
 }
 
+function buildNewPage(project: ComicProject, pagesLength: number): ComicProject["pages"][number] {
+  return {
+    id: createPageId(),
+    title: `Page ${String(pagesLength + 1).padStart(2, "0")}`,
+    width: 852,
+    height: 1200,
+    panels: [buildNewPanel(project, 0, "bw")]
+  };
+}
+
 export const useEditorStore = create<EditorState>((set, get) => ({
   project: defaultProject,
   selectedPageId: defaultProject.pages[0]?.id ?? "",
   selectedPanelId: defaultProject.pages[0]?.panels[0]?.id ?? null,
   activeJob: null,
   promptPreview: null,
+  isDirty: false,
+  lastSavedAt: null,
   hydrateProject: (project) =>
-    set({
-      project,
-      selectedPageId: project.pages[0]?.id ?? "",
-      selectedPanelId: project.pages[0]?.panels[0]?.id ?? null
+    set((state) => {
+      const nextPage =
+        project.pages.find((page) => page.id === state.selectedPageId) ?? project.pages[0];
+      const nextPanel =
+        nextPage?.panels.find((panel) => panel.id === state.selectedPanelId) ?? nextPage?.panels[0] ?? null;
+      return {
+        project,
+        selectedPageId: nextPage?.id ?? "",
+        selectedPanelId: nextPanel?.id ?? null,
+        isDirty: false,
+        lastSavedAt: new Date().toISOString()
+      };
+    }),
+  markProjectSaved: (project) =>
+    set((state) => {
+      const nextPage =
+        project.pages.find((page) => page.id === state.selectedPageId) ?? project.pages[0];
+      const nextPanel =
+        nextPage?.panels.find((panel) => panel.id === state.selectedPanelId) ?? nextPage?.panels[0] ?? null;
+      return {
+        project,
+        selectedPageId: nextPage?.id ?? "",
+        selectedPanelId: nextPanel?.id ?? null,
+        isDirty: false,
+        lastSavedAt: new Date().toISOString(),
+        promptPreview: null
+      };
+    }),
+  setSelectedPageId: (pageId) =>
+    set((state) => {
+      const page = state.project.pages.find((item) => item.id === pageId);
+      return {
+        selectedPageId: pageId,
+        selectedPanelId: page?.panels[0]?.id ?? null,
+        promptPreview: null
+      };
     }),
   applyTemplate: (template) => {
     set((state) => ({
@@ -188,7 +255,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       ),
       selectedPanelId: null,
       promptPreview: null,
-      activeJob: null
+      activeJob: null,
+      isDirty: true
     }));
   },
   selectPanel: (panelId) => set({ selectedPanelId: panelId }),
@@ -208,7 +276,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
               }
             : panel
         )
-      )
+      ),
+      isDirty: true
     }));
   },
   updatePanelPrompt: (panelId, updates) => {
@@ -225,14 +294,16 @@ export const useEditorStore = create<EditorState>((set, get) => ({
               }
             : panel
         )
-      )
+      ),
+      isDirty: true
     }));
   },
   updatePanelMeta: (panelId, updates) => {
     set((state) => ({
       project: updateCurrentPage(state.project, state.selectedPageId, (panels) =>
         panels.map((panel) => (panel.id === panelId ? { ...panel, ...updates } : panel))
-      )
+      ),
+      isDirty: true
     }));
   },
   updatePanelGeneration: (panelId, updates) => {
@@ -249,7 +320,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
               }
             : panel
         )
-      )
+      ),
+      isDirty: true
     }));
   },
   updateSceneMemory: (sceneMemoryId, updates) =>
@@ -259,7 +331,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         sceneMemories: state.project.sceneMemories.map((sceneMemory) =>
           sceneMemory.id === sceneMemoryId ? { ...sceneMemory, ...updates } : sceneMemory
         )
-      }
+      },
+      isDirty: true
     })),
   replaceSceneMemory: (nextSceneMemory) =>
     set((state) => ({
@@ -268,22 +341,79 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         sceneMemories: state.project.sceneMemories.map((sceneMemory) =>
           sceneMemory.id === nextSceneMemory.id ? nextSceneMemory : sceneMemory
         )
-      }
+      },
+      isDirty: true
     })),
   replaceModels: (models) =>
     set((state) => ({
       project: {
         ...state.project,
         models
-      }
+      },
+      isDirty: true
     })),
+  addPage: () => {
+    set((state) => {
+      const nextPage = buildNewPage(state.project, state.project.pages.length);
+      return {
+        project: {
+          ...state.project,
+          pages: [...state.project.pages, nextPage]
+        },
+        selectedPageId: nextPage.id,
+        selectedPanelId: nextPage.panels[0]?.id ?? null,
+        promptPreview: null,
+        isDirty: true
+      };
+    });
+  },
+  duplicateCurrentPage: () => {
+    const { selectedPageId } = get();
+    set((state) => {
+      const source = state.project.pages.find((page) => page.id === selectedPageId);
+      if (!source) {
+        return {};
+      }
+
+      const duplicatedPage: ComicPage = {
+        ...source,
+        id: createPageId(),
+        title: `${source.title} Copy`,
+        panels: source.panels.map(
+          (panel, index): ComicPanel => ({
+            ...panel,
+            id: createPanelId(),
+            title: `${panel.title}${index === 0 ? " Copy" : ""}`,
+            latestJobStatus: "idle",
+            imageUrl: undefined,
+            generation: {
+              ...panel.generation,
+              seed: Math.floor(Math.random() * 10_000_000)
+            }
+          })
+        )
+      };
+
+      return {
+        project: {
+          ...state.project,
+          pages: [...state.project.pages, duplicatedPage]
+        },
+        selectedPageId: duplicatedPage.id,
+        selectedPanelId: duplicatedPage.panels[0]?.id ?? null,
+        promptPreview: null,
+        isDirty: true
+      };
+    });
+  },
   addPanel: () => {
     const { selectedPageId } = get();
     set((state) => ({
       project: updateCurrentPage(state.project, selectedPageId, (panels) => [
         ...panels,
         buildNewPanel(state.project, panels.length, "color")
-      ])
+      ]),
+      isDirty: true
     }));
   },
   duplicateSelectedPanel: () => {
@@ -314,7 +444,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             }
           }
         ];
-      })
+      }),
+      isDirty: true
     }));
   },
   setPromptPreview: (preview) => set({ promptPreview: preview }),
@@ -323,13 +454,15 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     set((state) => ({
       project: updateCurrentPage(state.project, state.selectedPageId, (panels) =>
         panels.map((panel) => (panel.id === panelId ? { ...panel, latestJobStatus: status } : panel))
-      )
+      ),
+      isDirty: true
     })),
   setPanelImage: (panelId, imageUrl) =>
     set((state) => ({
       project: updateCurrentPage(state.project, state.selectedPageId, (panels) =>
         panels.map((panel) => (panel.id === panelId ? { ...panel, imageUrl } : panel))
-      )
+      ),
+      isDirty: true
     })),
   updateCharacter: (characterId, updates) =>
     set((state) => ({
@@ -338,7 +471,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         characters: state.project.characters.map((character) =>
           character.id === characterId ? { ...character, ...updates } : character
         )
-      }
+      },
+      isDirty: true
     })),
   replaceCharacter: (nextCharacter) =>
     set((state) => ({
@@ -347,7 +481,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         characters: state.project.characters.map((character) =>
           character.id === nextCharacter.id ? nextCharacter : character
         )
-      }
+      },
+      isDirty: true
     })),
   appendCharacterReference: (characterId, reference) =>
     set((state) => ({
@@ -365,7 +500,86 @@ export const useEditorStore = create<EditorState>((set, get) => ({
               }
             : character
         )
-      }
+      },
+      isDirty: true
+    })),
+  updateCharacterReference: (characterId, referenceId, updates) =>
+    set((state) => ({
+      project: {
+        ...state.project,
+        characters: state.project.characters.map((character) =>
+          character.id === characterId
+            ? {
+                ...character,
+                references: character.references.map((reference) =>
+                  reference.id === referenceId ? { ...reference, ...updates } : reference
+                )
+              }
+            : character
+        )
+      },
+      isDirty: true
+    })),
+  removeCharacterReference: (characterId, referenceId) =>
+    set((state) => ({
+      project: {
+        ...state.project,
+        characters: state.project.characters.map((character) =>
+          character.id === characterId
+            ? {
+                ...character,
+                references: character.references.filter((reference) => reference.id !== referenceId),
+                adapter: {
+                  ...character.adapter,
+                  referenceImageIds: character.adapter.referenceImageIds.filter((item) => item !== referenceId)
+                }
+              }
+            : character
+        )
+      },
+      isDirty: true
+    })),
+  toggleCharacterAdapterReference: (characterId, referenceId, enabled) =>
+    set((state) => ({
+      project: {
+        ...state.project,
+        characters: state.project.characters.map((character) => {
+          if (character.id !== characterId) {
+            return character;
+          }
+          const referenceImageIds = enabled
+            ? Array.from(new Set([...character.adapter.referenceImageIds, referenceId]))
+            : character.adapter.referenceImageIds.filter((item) => item !== referenceId);
+          return {
+            ...character,
+            adapter: {
+              ...character.adapter,
+              referenceImageIds
+            }
+          };
+        })
+      },
+      isDirty: true
+    })),
+  setCharacterPrimaryReference: (characterId, referenceId) =>
+    set((state) => ({
+      project: {
+        ...state.project,
+        characters: state.project.characters.map((character) => {
+          if (character.id !== characterId) {
+            return character;
+          }
+          const remaining = character.adapter.referenceImageIds.filter((item) => item !== referenceId);
+          return {
+            ...character,
+            adapter: {
+              ...character.adapter,
+              referenceImageIds: [referenceId, ...remaining]
+            }
+          };
+        })
+      },
+      isDirty: true
     })),
   updateCharacterAdapter: (characterId, updates) =>
     set((state) => ({
@@ -382,7 +596,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
               }
             : character
         )
-      }
+      },
+      isDirty: true
     })),
   updateWorkflow: (workflowId, updates) =>
     set((state) => ({
@@ -391,7 +606,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         workflows: state.project.workflows.map((workflow) =>
           workflow.id === workflowId ? { ...workflow, ...updates } : workflow
         )
-      }
+      },
+      isDirty: true
     })),
   addWorkflowBinding: (workflowId, binding) =>
     set((state) => ({
@@ -402,7 +618,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             ? { ...workflow, nodeBindings: [...workflow.nodeBindings, binding] }
             : workflow
         )
-      }
+      },
+      isDirty: true
     })),
   updateWorkflowBinding: (workflowId, bindingId, updates) =>
     set((state) => ({
@@ -418,7 +635,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
               }
             : workflow
         )
-      }
+      },
+      isDirty: true
     })),
   removeWorkflowBinding: (workflowId, bindingId) =>
     set((state) => ({
@@ -432,14 +650,16 @@ export const useEditorStore = create<EditorState>((set, get) => ({
               }
             : workflow
         )
-      }
+      },
+      isDirty: true
     })),
   addWorkflow: (workflow) =>
     set((state) => ({
       project: {
         ...state.project,
         workflows: [...state.project.workflows, workflow]
-      }
+      },
+      isDirty: true
     }))
 }));
 

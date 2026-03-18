@@ -12,6 +12,7 @@
         "id": "ref-rin-front",
         "label": "Front portrait",
         "url": "https://example.invalid/rin-front.png",
+        "role": "support",
         "angle": "front",
         "notes": "Primary face and hair reference."
       },
@@ -19,6 +20,7 @@
         "id": "ref-rin-full",
         "label": "Full body",
         "url": "https://example.invalid/rin-full.png",
+        "role": "support",
         "angle": "full-body",
         "notes": "Use for coat silhouette and body proportions."
       }
@@ -68,6 +70,7 @@
         "id": "ref-kai-front",
         "label": "Front portrait",
         "url": "https://example.invalid/kai-front.png",
+        "role": "support",
         "angle": "front",
         "notes": "Primary glasses and facial proportion reference."
       },
@@ -75,6 +78,7 @@
         "id": "ref-71c99a26",
         "label": "Kai Slot 2",
         "url": "/static/character-references/ref-71c99a26.png",
+        "role": "support",
         "angle": "front",
         "notes": "slot2 test"
       }

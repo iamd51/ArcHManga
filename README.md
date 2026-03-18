@@ -34,6 +34,9 @@ The workspace already includes:
 - the editor can inspect ComfyUI queue state, sample node info, and cancel the active generation job
 - imported or selected workflows can be validated against live ComfyUI `object_info` before use
 - workflow validation now reports unknown node types, missing custom nodes, and recommended binding gaps
+- page, panel, and whole-project snapshots can now be saved and reloaded through FastAPI
+- character references can be edited, marked for adapter use, promoted to primary, and deleted from the inspector
+- the editor can export the current page as a clean PNG or PDF render
 - FastAPI endpoints for bootstrap project data, prompt preview, generation submit, and job polling
 - a mock ComfyUI completion path so the end-to-end UX can be tested before a real worker is connected
 
@@ -92,6 +95,7 @@ Uploaded references are served back under `/static/...`.
 Imported and edited workflow presets are snapshot-saved under `apps/api/storage/workflows/`.
 Character metadata and adapter settings are snapshot-saved under `apps/api/storage/characters.json`.
 Scene memories are snapshot-saved under `apps/api/storage/scene-memories.json`.
+Full project/page/panel state is snapshot-saved under `apps/api/storage/project.json`.
 
 ## Verification
 
@@ -107,3 +111,5 @@ Verified locally in this workspace:
 - ComfyUI status and model sync routes via `TestClient`
 - ComfyUI queue/object-info routes and generation cancel flow via `TestClient`
 - workflow validation against sample `object_info`, recommended mappings, and missing custom nodes via `TestClient`
+- full project persistence roundtrip via `PUT /api/projects/{projectId}` and `storage/project.json`
+- character reference upload, metadata patch, and delete flow via `TestClient`

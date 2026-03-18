@@ -92,6 +92,7 @@ export interface CharacterReferenceImage {
   id: string;
   label: string;
   url: string;
+  role: "primary" | "face" | "full-body" | "expression" | "outfit" | "support";
   angle: "front" | "three-quarter" | "profile" | "full-body" | "expression";
   notes: string;
 }

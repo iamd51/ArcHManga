@@ -3,6 +3,8 @@
 import Image from "next/image";
 import { useMutation } from "@tanstack/react-query";
 import {
+  deleteCharacterReference,
+  updateCharacterReference as updateCharacterReferenceRequest,
   updateCharacterProfile,
   updateSceneMemory,
   updateWorkflowPreset,
@@ -66,6 +68,9 @@ export function Inspector({
   const addWorkflowBinding = useEditorStore((state) => state.addWorkflowBinding);
   const updateWorkflowBinding = useEditorStore((state) => state.updateWorkflowBinding);
   const removeWorkflowBinding = useEditorStore((state) => state.removeWorkflowBinding);
+  const updateCharacterReferenceLocal = useEditorStore((state) => state.updateCharacterReference);
+  const toggleCharacterAdapterReference = useEditorStore((state) => state.toggleCharacterAdapterReference);
+  const setCharacterPrimaryReference = useEditorStore((state) => state.setCharacterPrimaryReference);
   const uploadMutation = useMutation({
     mutationFn: uploadCharacterReference,
     onSuccess: (result) => appendCharacterReference(result.characterId, result.reference)
@@ -114,6 +119,38 @@ export function Inspector({
     },
     onSuccess: (nextSceneMemory) => replaceSceneMemory(nextSceneMemory)
   });
+  const referenceSaveMutation = useMutation({
+    mutationFn: async ({
+      characterId,
+      referenceId
+    }: {
+      characterId: string;
+      referenceId: string;
+    }) => {
+      const character = project.characters.find((item) => item.id === characterId);
+      const reference = character?.references.find((item) => item.id === referenceId);
+      if (!character || !reference) {
+        throw new Error("Reference not found.");
+      }
+      return updateCharacterReferenceRequest(characterId, referenceId, {
+        label: reference.label,
+        role: reference.role,
+        angle: reference.angle,
+        notes: reference.notes
+      });
+    },
+    onSuccess: (character) => replaceCharacter(character)
+  });
+  const referenceDeleteMutation = useMutation({
+    mutationFn: async ({
+      characterId,
+      referenceId
+    }: {
+      characterId: string;
+      referenceId: string;
+    }) => deleteCharacterReference(characterId, referenceId),
+    onSuccess: (character) => replaceCharacter(character)
+  });
 
   if (!selectedPanel) {
     return (
@@ -149,6 +186,8 @@ export function Inspector({
           { value: 1, label: "Slot 2" },
           { value: 2, label: "Slot 3" }
         ];
+  const referenceRoleOptions = ["primary", "face", "full-body", "expression", "outfit", "support"] as const;
+  const referenceAngleOptions = ["front", "three-quarter", "profile", "full-body", "expression"] as const;
 
   return (
     <aside className="surface inspector">
@@ -575,12 +614,130 @@ export function Inspector({
                   }
                 />
                 <span>Forbidden drift: {character.consistency.forbiddenDrift.join(" · ")}</span>
-                <span>
-                  References:{" "}
-                  {character.references.length > 0
-                    ? character.references.map((reference) => reference.label).join(" · ")
-                    : "none"}
-                </span>
+                <div className="stack">
+                  <strong>Reference Manager</strong>
+                  {character.references.length > 0 ? (
+                    character.references.map((reference) => {
+                      const activeInAdapter = character.adapter.referenceImageIds.includes(reference.id);
+                      const isPrimary = character.adapter.referenceImageIds[0] === reference.id;
+                      return (
+                        <div key={reference.id} className="hint-box">
+                          <div className="status-row">
+                            <strong>{reference.label}</strong>
+                            <span className="status-pill">
+                              {isPrimary ? "Primary" : activeInAdapter ? "Adapter ref" : reference.role}
+                            </span>
+                          </div>
+                          <div className="two-column">
+                            <input
+                              className="input"
+                              value={reference.label}
+                              onChange={(event) =>
+                                updateCharacterReferenceLocal(character.id, reference.id, {
+                                  label: event.target.value
+                                })
+                              }
+                            />
+                            <select
+                              className="select"
+                              value={reference.role}
+                              onChange={(event) =>
+                                updateCharacterReferenceLocal(character.id, reference.id, {
+                                  role: event.target.value as (typeof referenceRoleOptions)[number]
+                                })
+                              }
+                            >
+                              {referenceRoleOptions.map((role) => (
+                                <option key={`${reference.id}-${role}`} value={role}>
+                                  {role}
+                                </option>
+                              ))}
+                            </select>
+                            <select
+                              className="select"
+                              value={reference.angle}
+                              onChange={(event) =>
+                                updateCharacterReferenceLocal(character.id, reference.id, {
+                                  angle: event.target.value as (typeof referenceAngleOptions)[number]
+                                })
+                              }
+                            >
+                              {referenceAngleOptions.map((angle) => (
+                                <option key={`${reference.id}-${angle}`} value={angle}>
+                                  {angle}
+                                </option>
+                              ))}
+                            </select>
+                            <label className="chip">
+                              <input
+                                type="checkbox"
+                                checked={activeInAdapter}
+                                onChange={(event) =>
+                                  toggleCharacterAdapterReference(
+                                    character.id,
+                                    reference.id,
+                                    event.target.checked
+                                  )
+                                }
+                              />
+                              Use in adapter
+                            </label>
+                          </div>
+                          <textarea
+                            className="textarea compact"
+                            value={reference.notes}
+                            onChange={(event) =>
+                              updateCharacterReferenceLocal(character.id, reference.id, {
+                                notes: event.target.value
+                              })
+                            }
+                          />
+                          <div className="toolbar-actions">
+                            <a className="button subtle" href={reference.url} target="_blank" rel="noreferrer">
+                              Open image
+                            </a>
+                            <button
+                              className="button subtle"
+                              type="button"
+                              disabled={!activeInAdapter || isPrimary}
+                              onClick={() => setCharacterPrimaryReference(character.id, reference.id)}
+                            >
+                              {isPrimary ? "Primary reference" : "Make primary"}
+                            </button>
+                            <button
+                              className="button"
+                              type="button"
+                              disabled={referenceSaveMutation.isPending}
+                              onClick={() =>
+                                referenceSaveMutation.mutate({
+                                  characterId: character.id,
+                                  referenceId: reference.id
+                                })
+                              }
+                            >
+                              {referenceSaveMutation.isPending ? "Saving..." : "Save reference"}
+                            </button>
+                            <button
+                              className="button subtle"
+                              type="button"
+                              disabled={referenceDeleteMutation.isPending}
+                              onClick={() =>
+                                referenceDeleteMutation.mutate({
+                                  characterId: character.id,
+                                  referenceId: reference.id
+                                })
+                              }
+                            >
+                              {referenceDeleteMutation.isPending ? "Deleting..." : "Delete"}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="hint-box">No reference images yet. Upload one to start anchoring identity.</div>
+                  )}
+                </div>
                 <button
                   className="button"
                   type="button"
@@ -602,6 +759,7 @@ export function Inspector({
                       characterId: character.id,
                       file,
                       label: file.name.replace(/\.[^.]+$/, ""),
+                      role: "support",
                       angle: "front",
                       notes: `Uploaded for ${character.name}`
                     });
@@ -804,6 +962,16 @@ export function Inspector({
         {characterSaveMutation.error ? (
           <div className="callout callout-warning">
             Character save failed. Check that the API is running before saving consistency settings.
+          </div>
+        ) : null}
+        {referenceSaveMutation.error ? (
+          <div className="callout callout-warning">
+            Reference save failed. Check that the API is running before saving reference metadata.
+          </div>
+        ) : null}
+        {referenceDeleteMutation.error ? (
+          <div className="callout callout-warning">
+            Reference delete failed. Check that the API is running before deleting reference images.
           </div>
         ) : null}
         {sceneMemorySaveMutation.error ? (

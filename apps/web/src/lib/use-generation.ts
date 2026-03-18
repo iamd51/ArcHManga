@@ -8,7 +8,8 @@ import {
   createGenerationJob,
   createPromptPreview,
   fetchBootstrapProject,
-  fetchGenerationJob
+  fetchGenerationJob,
+  saveProject
 } from "@/lib/api";
 import { useCurrentPage, useEditorStore, useSelectedPanel, useSelectedWorkflow } from "@/store/editor-store";
 
@@ -198,5 +199,23 @@ export function useGenerationActions() {
     cancelGenerationMutation,
     continuityDraftMutation,
     jobQuery
+  };
+}
+
+export function useProjectPersistence() {
+  const project = useEditorStore((state) => state.project);
+  const markProjectSaved = useEditorStore((state) => state.markProjectSaved);
+  const queryClient = useQueryClient();
+
+  const saveProjectMutation = useMutation({
+    mutationFn: async () => saveProject(project),
+    onSuccess: (savedProject) => {
+      markProjectSaved(savedProject);
+      queryClient.setQueryData(["bootstrap-project"], savedProject);
+    }
+  });
+
+  return {
+    saveProjectMutation
   };
 }

@@ -69,6 +69,7 @@ class CharacterReferenceImage(ApiModel):
     id: str
     label: str
     url: str
+    role: str = "support"
     angle: str
     notes: str
 
@@ -106,6 +107,13 @@ class CharacterUpdateRequest(ApiModel):
     negative_prompt: str | None = None
     consistency: ConsistencyProfile | None = None
     adapter: CharacterConsistencyAdapter | None = None
+
+
+class CharacterReferenceUpdateRequest(ApiModel):
+    label: str | None = None
+    role: str | None = None
+    angle: str | None = None
+    notes: str | None = None
 
 
 class PanelPromptSettings(ApiModel):

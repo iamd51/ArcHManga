@@ -237,6 +237,7 @@ export const defaultProject: ComicProject = {
           id: "ref-rin-front",
           label: "Front portrait",
           url: "https://example.invalid/rin-front.png",
+          role: "primary",
           angle: "front",
           notes: "Best anchor for hair shape and eye color."
         },
@@ -244,6 +245,7 @@ export const defaultProject: ComicProject = {
           id: "ref-rin-full",
           label: "Full body",
           url: "https://example.invalid/rin-full.png",
+          role: "full-body",
           angle: "full-body",
           notes: "Use for coat silhouette and body proportions."
         }
@@ -275,6 +277,7 @@ export const defaultProject: ComicProject = {
           id: "ref-kai-front",
           label: "Front portrait",
           url: "https://example.invalid/kai-front.png",
+          role: "primary",
           angle: "front",
           notes: "Primary glasses and facial proportion reference."
         }

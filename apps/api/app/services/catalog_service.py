@@ -6,6 +6,7 @@ from uuid import uuid4
 from app.schemas.comic import (
     CharacterProfile,
     CharacterReferenceImage,
+    CharacterReferenceUpdateRequest,
     CharacterReferenceUploadResponse,
     CharacterUpdateRequest,
     ComicProject,
@@ -28,13 +29,29 @@ class CatalogService:
         self.reference_dir = self.storage_dir / "character-references"
         self.character_file = self.storage_dir / "characters.json"
         self.scene_memory_file = self.storage_dir / "scene-memories.json"
+        self.project_file = self.storage_dir / "project.json"
+        self.storage_dir.mkdir(parents=True, exist_ok=True)
         self.workflow_dir.mkdir(parents=True, exist_ok=True)
         self.reference_dir.mkdir(parents=True, exist_ok=True)
-        self._load_saved_characters()
-        self._load_saved_scene_memories()
-        self._load_saved_workflows()
+        if not self._load_saved_project():
+            self._load_saved_characters()
+            self._load_saved_scene_memories()
+            self._load_saved_workflows()
 
-    def get_project(self) -> ComicProject:
+    def get_project(self, project_id: str | None = None) -> ComicProject:
+        if project_id and self.project.id != project_id:
+            raise ValueError("Project not found.")
+        return deepcopy(self.project)
+
+    def save_project(self, project: ComicProject) -> ComicProject:
+        if project.id != self.project.id:
+            raise ValueError("Project id mismatch.")
+
+        self.project = ComicProject.model_validate(project.model_dump(by_alias=True))
+        self._save_project_snapshot()
+        self._save_workflow_snapshots()
+        self._save_characters()
+        self._save_scene_memories()
         return deepcopy(self.project)
 
     def list_models(self):
@@ -73,6 +90,7 @@ class CatalogService:
         )
         self.project.workflows.append(workflow)
         self._save_workflow_snapshot(workflow)
+        self._save_project_snapshot()
         return workflow
 
     def update_workflow(self, workflow_id: str, payload: WorkflowUpdateRequest) -> WorkflowPreset:
@@ -86,6 +104,7 @@ class CatalogService:
             workflow.node_bindings = payload.node_bindings
 
         self._save_workflow_snapshot(workflow)
+        self._save_project_snapshot()
         return workflow
 
     def add_character_reference(
@@ -93,6 +112,7 @@ class CatalogService:
         character_id: str,
         filename: str,
         label: str,
+        role: str,
         angle: str,
         notes: str,
         content: bytes,
@@ -110,6 +130,7 @@ class CatalogService:
             id=reference_id,
             label=label,
             url=f"/static/character-references/{saved_path.name}",
+            role=role,
             angle=angle,
             notes=notes,
         )
@@ -117,8 +138,56 @@ class CatalogService:
         if reference.id not in character.adapter.reference_image_ids:
             character.adapter.reference_image_ids.append(reference.id)
         self._save_characters()
+        self._save_project_snapshot()
 
         return CharacterReferenceUploadResponse(character_id=character_id, reference=reference)
+
+    def update_character_reference(
+        self,
+        character_id: str,
+        reference_id: str,
+        payload: CharacterReferenceUpdateRequest,
+    ) -> CharacterProfile:
+        character = next((item for item in self.project.characters if item.id == character_id), None)
+        if character is None:
+            raise ValueError("Character not found.")
+
+        reference = next((item for item in character.references if item.id == reference_id), None)
+        if reference is None:
+            raise ValueError("Reference not found.")
+
+        for field in ["label", "role", "angle", "notes"]:
+            value = getattr(payload, field)
+            if value is not None:
+                setattr(reference, field, value)
+
+        self._save_characters()
+        self._save_project_snapshot()
+        return character
+
+    def delete_character_reference(self, character_id: str, reference_id: str) -> CharacterProfile:
+        character = next((item for item in self.project.characters if item.id == character_id), None)
+        if character is None:
+            raise ValueError("Character not found.")
+
+        reference = next((item for item in character.references if item.id == reference_id), None)
+        if reference is None:
+            raise ValueError("Reference not found.")
+
+        character.references = [item for item in character.references if item.id != reference_id]
+        character.adapter.reference_image_ids = [
+            item for item in character.adapter.reference_image_ids if item != reference_id
+        ]
+
+        if reference.url.startswith("/static/character-references/"):
+            filename = reference.url.removeprefix("/static/character-references/")
+            saved_path = self.reference_dir / filename
+            if saved_path.exists():
+                saved_path.unlink()
+
+        self._save_characters()
+        self._save_project_snapshot()
+        return character
 
     def update_character(self, character_id: str, payload: CharacterUpdateRequest) -> CharacterProfile:
         character = next((item for item in self.project.characters if item.id == character_id), None)
@@ -135,6 +204,7 @@ class CatalogService:
             character.adapter = payload.adapter
 
         self._save_characters()
+        self._save_project_snapshot()
         return character
 
     def update_scene_memory(self, scene_memory_id: str, payload: SceneMemoryUpdateRequest) -> SceneMemory:
@@ -158,10 +228,30 @@ class CatalogService:
                 setattr(scene_memory, field, value)
 
         self._save_scene_memories()
+        self._save_project_snapshot()
         return scene_memory
 
     def _workflow_snapshot_path(self, workflow_id: str) -> Path:
         return self.workflow_dir / f"{workflow_id}.json"
+
+    def _save_project_snapshot(self) -> None:
+        self.project_file.write_text(
+            json.dumps(self.project.model_dump(by_alias=True), ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
+    def _load_saved_project(self) -> bool:
+        if not self.project_file.exists():
+            return False
+        try:
+            self.project = ComicProject.model_validate_json(self.project_file.read_text(encoding="utf-8"))
+            return True
+        except Exception:
+            return False
+
+    def _save_workflow_snapshots(self) -> None:
+        for workflow in self.project.workflows:
+            self._save_workflow_snapshot(workflow)
 
     def _save_workflow_snapshot(self, workflow: WorkflowPreset) -> None:
         path = self._workflow_snapshot_path(workflow.id)

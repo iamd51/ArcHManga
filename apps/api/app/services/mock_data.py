@@ -227,6 +227,7 @@ def get_mock_characters() -> list[CharacterProfile]:
                     id="ref-rin-front",
                     label="Front portrait",
                     url="https://example.invalid/rin-front.png",
+                    role="primary",
                     angle="front",
                     notes="Primary face and hair reference.",
                 ),
@@ -234,6 +235,7 @@ def get_mock_characters() -> list[CharacterProfile]:
                     id="ref-rin-full",
                     label="Full body",
                     url="https://example.invalid/rin-full.png",
+                    role="full-body",
                     angle="full-body",
                     notes="Use for coat silhouette and body proportions.",
                 ),
@@ -265,6 +267,7 @@ def get_mock_characters() -> list[CharacterProfile]:
                     id="ref-kai-front",
                     label="Front portrait",
                     url="https://example.invalid/kai-front.png",
+                    role="primary",
                     angle="front",
                     notes="Primary glasses and facial proportion reference.",
                 )

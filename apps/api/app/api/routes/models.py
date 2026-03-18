@@ -2,6 +2,7 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
 from app.schemas.comic import (
     CharacterProfile,
+    CharacterReferenceUpdateRequest,
     CharacterReferenceUploadResponse,
     CharacterUpdateRequest,
     ComfyObjectInfoSummary,
@@ -83,6 +84,7 @@ async def upload_character_reference(
     character_id: str,
     file: UploadFile = File(...),
     label: str = Form(...),
+    role: str = Form("support"),
     angle: str = Form(...),
     notes: str = Form(""),
 ) -> CharacterReferenceUploadResponse:
@@ -92,10 +94,31 @@ async def upload_character_reference(
             character_id=character_id,
             filename=file.filename or "reference.png",
             label=label,
+            role=role,
             angle=angle,
             notes=notes,
             content=content,
         )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.patch("/characters/{character_id}/references/{reference_id}", response_model=CharacterProfile)
+async def update_character_reference(
+    character_id: str,
+    reference_id: str,
+    payload: CharacterReferenceUpdateRequest,
+) -> CharacterProfile:
+    try:
+        return catalog_service.update_character_reference(character_id, reference_id, payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.delete("/characters/{character_id}/references/{reference_id}", response_model=CharacterProfile)
+async def delete_character_reference(character_id: str, reference_id: str) -> CharacterProfile:
+    try:
+        return catalog_service.delete_character_reference(character_id, reference_id)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
