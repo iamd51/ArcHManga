@@ -57,6 +57,8 @@ def build_character_consistency_selection(
     character: CharacterProfile,
     previous_panel: ComicPanel | None = None,
 ) -> CharacterConsistencySelection:
+    effective_revision_intent = _build_character_revision_intent(panel, character.id)
+    character_lock_override = _get_character_lock_override(panel, character.id)
     preferred_roles = _select_preferred_roles(panel)
     previous_state = _get_previous_character_state(previous_panel, character.id)
     references = _select_reference_images(character, preferred_roles, previous_state)
@@ -73,6 +75,21 @@ def build_character_consistency_selection(
             if character.consistency.expression_defaults
             else ""
         ),
+        f"{character.name} appearance continuity is explicitly locked for this panel."
+        if effective_revision_intent.lock_character_appearance
+        else "",
+        f"{character.name} wardrobe continuity is explicitly locked for this panel."
+        if effective_revision_intent.lock_character_wardrobe
+        else "",
+        f"{character.name} expression continuity is explicitly locked for this panel."
+        if effective_revision_intent.lock_character_expression
+        else "",
+        f"{character.name} framing continuity is explicitly locked for this panel."
+        if effective_revision_intent.lock_camera_framing
+        else "",
+        f"{character.name} per-character lock override: {_summarize_character_lock(character_lock_override)}."
+        if character_lock_override and _summarize_character_lock(character_lock_override)
+        else "",
         f"{character.name} carry forward expression: {previous_state.expression}."
         if previous_state and previous_state.expression
         else "",
@@ -97,10 +114,17 @@ def build_character_consistency_selection(
         else "",
         character.negative_prompt,
     ]
-    warnings = _build_warnings(panel, character, preferred_roles, references, previous_state)
+    warnings = _build_warnings(
+        panel,
+        character,
+        preferred_roles,
+        references,
+        previous_state,
+        effective_revision_intent,
+    )
     score = min(
         100,
-        _score_character_consistency(character, references, panel)
+        _score_character_consistency(character, references, effective_revision_intent)
         + (8 if previous_state else 0)
         + (
             4
@@ -168,7 +192,14 @@ def _select_reference_images(character: CharacterProfile, preferred_roles: list[
     return ranked[:2]
 
 
-def _build_warnings(panel: ComicPanel, character: CharacterProfile, preferred_roles: list[str], references: list, previous_state=None):
+def _build_warnings(
+    panel: ComicPanel,
+    character: CharacterProfile,
+    preferred_roles: list[str],
+    references: list,
+    previous_state=None,
+    effective_revision_intent=None,
+):
     warnings: list[str] = []
     roles = {reference.role for reference in character.references}
     if not character.references:
@@ -179,7 +210,7 @@ def _build_warnings(panel: ComicPanel, character: CharacterProfile, preferred_ro
         warnings.append("Close-up identity references are missing for this shot.")
     if preferred_roles[0] in {"full-body", "outfit"} and not roles.intersection({"full-body", "outfit"}):
         warnings.append("Full-body or outfit anchors are missing for this shot.")
-    if panel.prompt.revision_intent.preserve_character_identity and not references:
+    if effective_revision_intent and effective_revision_intent.preserve_character_identity and not references:
         warnings.append("Identity lock is enabled, but this panel has no active reference anchors.")
     if (
         previous_state
@@ -199,7 +230,7 @@ def _get_previous_character_state(previous_panel: ComicPanel | None, character_i
     return None
 
 
-def _score_character_consistency(character: CharacterProfile, references: list, panel: ComicPanel) -> int:
+def _score_character_consistency(character: CharacterProfile, references: list, effective_revision_intent) -> int:
     score = 0
     if character.appearance:
         score += 18
@@ -217,9 +248,49 @@ def _score_character_consistency(character: CharacterProfile, references: list, 
         score += 16
     if character.adapter.enabled and references:
         score += 8
-    if panel.prompt.revision_intent.preserve_character_identity:
+    if effective_revision_intent.preserve_character_identity:
         score += 6
     return min(score, 100)
+
+
+def _get_character_lock_override(panel: ComicPanel, character_id: str):
+    for character_lock in panel.prompt.revision_intent.character_locks:
+        if character_lock.character_id == character_id:
+            return character_lock
+    return None
+
+
+def _build_character_revision_intent(panel: ComicPanel, character_id: str):
+    revision_intent = panel.prompt.revision_intent
+    character_lock = _get_character_lock_override(panel, character_id)
+    if not character_lock:
+        return revision_intent
+    updated = revision_intent.model_copy(deep=True)
+    if character_lock.preserve_character_identity is not None:
+        updated.preserve_character_identity = character_lock.preserve_character_identity
+    if character_lock.lock_character_appearance is not None:
+        updated.lock_character_appearance = character_lock.lock_character_appearance
+    if character_lock.lock_character_wardrobe is not None:
+        updated.lock_character_wardrobe = character_lock.lock_character_wardrobe
+    if character_lock.lock_character_expression is not None:
+        updated.lock_character_expression = character_lock.lock_character_expression
+    if character_lock.lock_camera_framing is not None:
+        updated.lock_camera_framing = character_lock.lock_camera_framing
+    return updated
+
+
+def _summarize_character_lock(character_lock) -> str:
+    if not character_lock:
+        return ""
+    bits = [
+        "appearance locked" if character_lock.lock_character_appearance else "",
+        "wardrobe locked" if character_lock.lock_character_wardrobe else "",
+        "expression locked" if character_lock.lock_character_expression else "",
+        "camera locked" if character_lock.lock_camera_framing else "",
+        "identity protected" if character_lock.preserve_character_identity else "",
+        character_lock.note,
+    ]
+    return ", ".join(bit for bit in bits if bit)
 
 
 def _resolve_readiness(score: int) -> str:

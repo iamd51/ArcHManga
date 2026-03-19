@@ -143,6 +143,16 @@ class CharacterReferenceUpdateRequest(ApiModel):
     notes: str | None = None
 
 
+class CharacterContinuityLock(ApiModel):
+    character_id: str
+    preserve_character_identity: bool | None = None
+    lock_character_appearance: bool | None = None
+    lock_character_wardrobe: bool | None = None
+    lock_character_expression: bool | None = None
+    lock_camera_framing: bool | None = None
+    note: str = ""
+
+
 class RevisionIntent(ApiModel):
     preserve_composition: bool = False
     preserve_background: bool = False
@@ -153,6 +163,7 @@ class RevisionIntent(ApiModel):
     lock_camera_framing: bool = False
     edit_priority: str = "general"
     change_instructions: str = ""
+    character_locks: list[CharacterContinuityLock] = Field(default_factory=list)
 
 
 class PanelPromptSettings(ApiModel):

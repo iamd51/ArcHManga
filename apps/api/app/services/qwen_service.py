@@ -1,9 +1,10 @@
 import json
+import re
 
 import httpx
 
 from app.core.config import get_settings
-from app.schemas.comic import RevisionIntent
+from app.schemas.comic import CharacterContinuityLock, RevisionIntent
 from app.schemas.generation import (
     ContinuityDraftRequest,
     ContinuityDraftResponse,
@@ -325,6 +326,7 @@ class QwenPromptService:
             "suggested_beats, panel_suggestion, scene_suggestion. "
             "Each beat should contain id, title, description, shot_type, mode, focus_character_ids. "
             "panel_suggestion should contain prompt, scene_summary, shot_type, style_notes, mode, character_ids, revision_intent. "
+            "revision_intent may include character_locks so different characters can keep different continuity rules. "
             "scene_suggestion should contain location, time_of_day, weather, lighting, mood, continuity_notes."
         )
         user_payload = {
@@ -355,6 +357,16 @@ class QwenPromptService:
                     "anchor_features": character.consistency.anchor_features,
                     "forbidden_drift": character.consistency.forbidden_drift,
                     "reference_notes": character.reference_notes,
+                    "current_character_lock": next(
+                        (
+                            lock.model_dump(by_alias=True)
+                            for lock in payload.selected_panel.prompt.revision_intent.character_locks
+                            if lock.character_id == character.id
+                        ),
+                        None,
+                    )
+                    if payload.selected_panel
+                    else None,
                 }
                 for character in payload.selected_characters
             ],
@@ -670,6 +682,7 @@ class QwenPromptService:
                 edit_priority = candidate
                 break
         change_instructions = payload.user_message.strip() or base.change_instructions
+        character_locks = self._detect_character_locks(payload, base)
         return RevisionIntent(
             preserve_composition=preserve_composition,
             preserve_background=preserve_background,
@@ -680,6 +693,7 @@ class QwenPromptService:
             lock_camera_framing=lock_camera_framing,
             edit_priority=edit_priority or "general",
             change_instructions=change_instructions,
+            character_locks=character_locks,
         )
 
     def _revision_intent_hints(self, revision_intent: RevisionIntent) -> list[str]:
@@ -702,7 +716,143 @@ class QwenPromptService:
             hints.append(f"Revision focus: {revision_intent.edit_priority}.")
         if revision_intent.change_instructions:
             hints.append(f"Requested change: {revision_intent.change_instructions}")
+        for character_lock in revision_intent.character_locks:
+            lock_summary = ", ".join(
+                bit
+                for bit in [
+                    "appearance" if character_lock.lock_character_appearance else "",
+                    "wardrobe" if character_lock.lock_character_wardrobe else "",
+                    "expression" if character_lock.lock_character_expression else "",
+                    "camera" if character_lock.lock_camera_framing else "",
+                    "identity" if character_lock.preserve_character_identity else "",
+                    character_lock.note,
+                ]
+                if bit
+            )
+            if lock_summary:
+                hints.append(f"Character-specific lock for {character_lock.character_id}: {lock_summary}.")
         return hints
+
+    def _detect_character_locks(
+        self,
+        payload: DirectorDraftRequest,
+        base: RevisionIntent,
+    ) -> list[CharacterContinuityLock]:
+        user_message = payload.user_message
+        lowered = user_message.lower()
+        character_locks: list[CharacterContinuityLock] = []
+        for character in payload.selected_characters or payload.available_characters:
+            name_tokens = [character.name, character.name.lower()]
+            if not any(token in user_message or token in lowered for token in name_tokens):
+                continue
+            existing_lock = next(
+                (lock for lock in base.character_locks if lock.character_id == character.id),
+                None,
+            )
+            lock = CharacterContinuityLock(
+                character_id=character.id,
+                preserve_character_identity=(
+                    existing_lock.preserve_character_identity
+                    if existing_lock and existing_lock.preserve_character_identity is not None
+                    else None
+                ),
+                lock_character_appearance=(
+                    existing_lock.lock_character_appearance
+                    if existing_lock and existing_lock.lock_character_appearance is not None
+                    else None
+                ),
+                lock_character_wardrobe=(
+                    existing_lock.lock_character_wardrobe
+                    if existing_lock and existing_lock.lock_character_wardrobe is not None
+                    else None
+                ),
+                lock_character_expression=(
+                    existing_lock.lock_character_expression
+                    if existing_lock and existing_lock.lock_character_expression is not None
+                    else None
+                ),
+                lock_camera_framing=(
+                    existing_lock.lock_camera_framing
+                    if existing_lock and existing_lock.lock_camera_framing is not None
+                    else None
+                ),
+                note=existing_lock.note if existing_lock else "",
+            )
+            segment = self._extract_character_segment(user_message, character.name)
+            segment_lowered = segment.lower()
+            positive_specs = [
+                ("preserve_character_identity", ["保留角色", "角色一致", "keep identity", "same character"]),
+                ("lock_character_appearance", ["延續外觀", "保持外觀", "外觀", "same appearance", "keep face"]),
+                ("lock_character_wardrobe", ["延續服裝", "保持服裝", "服裝", "same outfit", "keep outfit"]),
+                ("lock_character_expression", ["延續表情", "保持表情", "表情", "same expression", "keep expression"]),
+                ("lock_camera_framing", ["延續鏡頭", "保持鏡頭", "鏡頭維持", "鏡頭一樣", "same shot", "keep framing"]),
+            ]
+            negative_specs = [
+                ("lock_character_expression", ["表情可以改", "change expression", "expression can change"]),
+                ("lock_character_wardrobe", ["服裝可以改", "change outfit", "outfit can change"]),
+                ("lock_character_appearance", ["外觀可以改", "change appearance", "appearance can change"]),
+                ("lock_camera_framing", ["鏡頭可以改", "change framing", "camera can change"]),
+            ]
+            for field_name, tokens in positive_specs:
+                if any(
+                    token in segment
+                    or token in segment_lowered
+                    or self._character_token_match(user_message, character.name, token)
+                    for token in tokens
+                ):
+                    setattr(lock, field_name, True)
+            for field_name, tokens in negative_specs:
+                if any(
+                    token in segment
+                    or token in segment_lowered
+                    or self._character_token_match(user_message, character.name, token)
+                    for token in tokens
+                ):
+                    setattr(lock, field_name, False)
+            if any(
+                getattr(lock, field_name) is not None
+                for field_name in [
+                    "preserve_character_identity",
+                    "lock_character_appearance",
+                    "lock_character_wardrobe",
+                    "lock_character_expression",
+                    "lock_camera_framing",
+                ]
+            ):
+                lock.note = f"Director override from request for {character.name}."
+                character_locks.append(lock)
+        if not character_locks:
+            return base.character_locks
+        preserved_locks = [
+            lock for lock in base.character_locks if all(lock.character_id != item.character_id for item in character_locks)
+        ]
+        return [*preserved_locks, *character_locks]
+
+    def _extract_character_segment(self, user_message: str, character_name: str) -> str:
+        lowered = user_message.lower()
+        name_lowered = character_name.lower()
+        start = lowered.find(name_lowered)
+        if start == -1:
+            return user_message
+        stop_tokens = ["，", ",", "；", ";", "。", "."]
+        next_positions = [
+            user_message.find(token, start + len(character_name))
+            for token in stop_tokens
+            if user_message.find(token, start + len(character_name)) != -1
+        ]
+        end = min(next_positions) if next_positions else len(user_message)
+        return user_message[start:end]
+
+    def _character_token_match(self, user_message: str, character_name: str, token: str) -> bool:
+        clauses = [clause.strip() for clause in re.split(r"[，,；;。.!?]", user_message) if clause.strip()]
+        token_lowered = token.lower()
+        character_lowered = character_name.lower()
+        for clause in clauses:
+            lowered_clause = clause.lower()
+            if character_name in clause or character_lowered in lowered_clause:
+                if token in clause or token_lowered in lowered_clause:
+                    return True
+        return False
 
     def _suggest_beat_shot(self, index: int, panel_count: int) -> str:
         if panel_count == 1:

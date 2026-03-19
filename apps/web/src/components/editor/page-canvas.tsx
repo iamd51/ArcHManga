@@ -37,11 +37,41 @@ function usePanelImage(src?: string) {
   return image;
 }
 
+function summarizeCharacterLocks(
+  panel: ReturnType<typeof useCurrentPage>["panels"][number],
+  characterNames: Map<string, string>
+) {
+  return (panel.prompt.revisionIntent.characterLocks ?? [])
+    .map((lock) => {
+      const positiveTokens = [
+        lock.preserveCharacterIdentity ? "ID" : "",
+        lock.lockCharacterAppearance ? "APP" : "",
+        lock.lockCharacterWardrobe ? "WRD" : "",
+        lock.lockCharacterExpression ? "EXP" : "",
+        lock.lockCameraFraming ? "CAM" : ""
+      ].filter(Boolean);
+      const releasedTokens = [
+        lock.lockCharacterAppearance === false ? "APP free" : "",
+        lock.lockCharacterWardrobe === false ? "WRD free" : "",
+        lock.lockCharacterExpression === false ? "EXP free" : "",
+        lock.lockCameraFraming === false ? "CAM free" : ""
+      ].filter(Boolean);
+      const bits = [...positiveTokens, ...releasedTokens];
+      if (!bits.length && !lock.note) {
+        return null;
+      }
+      const name = characterNames.get(lock.characterId) ?? lock.characterId;
+      return `${name}: ${[...bits, lock.note].filter(Boolean).join(" · ")}`;
+    })
+    .filter((line): line is string => Boolean(line));
+}
+
 function PanelNode({
   panel,
   index,
   selected,
   renderMode,
+  characterLockLines,
   onSelect,
   onDragEnd,
   panelRef,
@@ -52,6 +82,7 @@ function PanelNode({
   index: number;
   selected: boolean;
   renderMode: "editor" | "export";
+  characterLockLines: string[];
   onSelect: () => void;
   onDragEnd: (event: KonvaEventObject<DragEvent>) => void;
   panelRef: (node: any) => void;
@@ -242,6 +273,28 @@ function PanelNode({
               fontStyle="bold"
             />
           ) : null}
+          {characterLockLines.length ? (
+            <>
+              <Rect
+                x={panel.width - Math.min(panel.width - 24, 250)}
+                y={16}
+                width={Math.min(panel.width - 24, 232)}
+                height={24 + characterLockLines.length * 20}
+                fill="rgba(23, 20, 18, 0.8)"
+                cornerRadius={12}
+              />
+              <Text
+                x={panel.width - Math.min(panel.width - 24, 238)}
+                y={24}
+                width={Math.min(panel.width - 36, 216)}
+                text={`Character locks\n${characterLockLines.join("\n")}`}
+                fontSize={13}
+                lineHeight={1.35}
+                fill="#fff8ef"
+                align="left"
+              />
+            </>
+          ) : null}
         </>
       ) : null}
     </Group>
@@ -256,6 +309,7 @@ export function PageCanvas({
   renderMode?: "editor" | "export";
 }) {
   const page = useCurrentPage();
+  const projectCharacters = useEditorStore((state) => state.project.characters);
   const selectedPanelId = useEditorStore((state) => state.selectedPanelId);
   const selectPanel = useEditorStore((state) => state.selectPanel);
   const updatePanelFrame = useEditorStore((state) => state.updatePanelFrame);
@@ -267,6 +321,7 @@ export function PageCanvas({
   const maskTransformerRef = useRef<any>(null);
   const [containerWidth, setContainerWidth] = useState(980);
   const selectedPanel = page.panels.find((panel) => panel.id === selectedPanelId) ?? null;
+  const characterNames = new Map(projectCharacters.map((character) => [character.id, character.name]));
 
   useEffect(() => {
     if (!containerRef.current) {
@@ -355,6 +410,7 @@ export function PageCanvas({
                 index={index}
                 selected={panel.id === selectedPanelId}
                 renderMode={renderMode}
+                characterLockLines={summarizeCharacterLocks(panel, characterNames)}
                 onSelect={() => selectPanel(panel.id)}
                 onDragEnd={(event) => {
                   updatePanelFrame(panel.id, {

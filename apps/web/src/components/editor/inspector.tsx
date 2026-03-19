@@ -233,6 +233,94 @@ export function Inspector({
       revisionIntent: continuityLockSuggestion.revisionIntent
     });
   };
+  const upsertCharacterLock = (
+    characterId: string,
+    updates: {
+      preserveCharacterIdentity?: boolean;
+      lockCharacterAppearance?: boolean;
+      lockCharacterWardrobe?: boolean;
+      lockCharacterExpression?: boolean;
+      lockCameraFraming?: boolean;
+      note?: string;
+    }
+  ) => {
+    const currentLocks = selectedPanel.prompt.revisionIntent.characterLocks ?? [];
+    const currentLock = currentLocks.find((lock) => lock.characterId === characterId);
+    const nextLock = {
+      characterId,
+      ...currentLock,
+      ...updates
+    };
+    const nextLocks = currentLock
+      ? currentLocks.map((lock) => (lock.characterId === characterId ? nextLock : lock))
+      : [...currentLocks, nextLock];
+    updatePanelPrompt(selectedPanel.id, {
+      revisionIntent: {
+        ...selectedPanel.prompt.revisionIntent,
+        characterLocks: nextLocks
+      }
+    });
+  };
+  const clearCharacterLock = (characterId: string) => {
+    updatePanelPrompt(selectedPanel.id, {
+      revisionIntent: {
+        ...selectedPanel.prompt.revisionIntent,
+        characterLocks: (selectedPanel.prompt.revisionIntent.characterLocks ?? []).filter(
+          (lock) => lock.characterId !== characterId
+        )
+      }
+    });
+  };
+  const applyCharacterLockPreset = (
+    characterId: string,
+    preset: "full-lock" | "allow-expression" | "wardrobe-appearance" | "camera-identity"
+  ) => {
+    const presetMap = {
+      "full-lock": {
+        preserveCharacterIdentity: true,
+        lockCharacterAppearance: true,
+        lockCharacterWardrobe: true,
+        lockCharacterExpression: true,
+        lockCameraFraming: true,
+        note: "Preset: full lock"
+      },
+      "allow-expression": {
+        preserveCharacterIdentity: true,
+        lockCharacterAppearance: true,
+        lockCharacterWardrobe: true,
+        lockCharacterExpression: false,
+        lockCameraFraming: false,
+        note: "Preset: expression can change"
+      },
+      "wardrobe-appearance": {
+        preserveCharacterIdentity: true,
+        lockCharacterAppearance: true,
+        lockCharacterWardrobe: true,
+        lockCharacterExpression: false,
+        lockCameraFraming: false,
+        note: "Preset: keep look and outfit"
+      },
+      "camera-identity": {
+        preserveCharacterIdentity: true,
+        lockCharacterAppearance: true,
+        lockCharacterWardrobe: false,
+        lockCharacterExpression: false,
+        lockCameraFraming: true,
+        note: "Preset: keep identity and framing"
+      }
+    } satisfies Record<
+      string,
+      {
+        preserveCharacterIdentity: boolean;
+        lockCharacterAppearance: boolean;
+        lockCharacterWardrobe: boolean;
+        lockCharacterExpression: boolean;
+        lockCameraFraming: boolean;
+        note: string;
+      }
+    >;
+    upsertCharacterLock(characterId, presetMap[preset]);
+  };
 
   return (
     <aside className="surface inspector">
@@ -933,6 +1021,10 @@ export function Inspector({
           <div className="card-grid">
             {attachedCharacters.map((character) => {
               const consistencyPlan = consistencyPlanByCharacterId.get(character.id);
+              const characterLock =
+                selectedPanel.prompt.revisionIntent.characterLocks?.find(
+                  (lock) => lock.characterId === character.id
+                ) ?? null;
               return (
                 <div key={character.id} className="mini-card active">
                 <strong>{character.name}</strong>
@@ -985,6 +1077,122 @@ export function Inspector({
                   {" · "}
                   {consistencyPlan?.readiness ?? "weak"}
                 </span>
+                <div className="stack">
+                  <div className="status-row">
+                    <strong>Character-specific continuity</strong>
+                    {characterLock ? (
+                      <button
+                        className="button subtle"
+                        type="button"
+                        onClick={() => clearCharacterLock(character.id)}
+                      >
+                        Clear override
+                      </button>
+                    ) : null}
+                  </div>
+                  <div className="meta-row">
+                    <button
+                      className="button subtle"
+                      type="button"
+                      onClick={() => applyCharacterLockPreset(character.id, "full-lock")}
+                    >
+                      Full lock
+                    </button>
+                    <button
+                      className="button subtle"
+                      type="button"
+                      onClick={() => applyCharacterLockPreset(character.id, "allow-expression")}
+                    >
+                      Allow expression
+                    </button>
+                    <button
+                      className="button subtle"
+                      type="button"
+                      onClick={() => applyCharacterLockPreset(character.id, "wardrobe-appearance")}
+                    >
+                      Keep look + outfit
+                    </button>
+                    <button
+                      className="button subtle"
+                      type="button"
+                      onClick={() => applyCharacterLockPreset(character.id, "camera-identity")}
+                    >
+                      Identity + camera
+                    </button>
+                  </div>
+                  <div className="meta-row">
+                    <label className="chip">
+                      <input
+                        type="checkbox"
+                        checked={characterLock?.preserveCharacterIdentity ?? false}
+                        onChange={(event) =>
+                          upsertCharacterLock(character.id, {
+                            preserveCharacterIdentity: event.target.checked
+                          })
+                        }
+                      />
+                      Identity
+                    </label>
+                    <label className="chip">
+                      <input
+                        type="checkbox"
+                        checked={characterLock?.lockCharacterAppearance ?? false}
+                        onChange={(event) =>
+                          upsertCharacterLock(character.id, {
+                            lockCharacterAppearance: event.target.checked
+                          })
+                        }
+                      />
+                      Appearance
+                    </label>
+                    <label className="chip">
+                      <input
+                        type="checkbox"
+                        checked={characterLock?.lockCharacterWardrobe ?? false}
+                        onChange={(event) =>
+                          upsertCharacterLock(character.id, {
+                            lockCharacterWardrobe: event.target.checked
+                          })
+                        }
+                      />
+                      Wardrobe
+                    </label>
+                    <label className="chip">
+                      <input
+                        type="checkbox"
+                        checked={characterLock?.lockCharacterExpression ?? false}
+                        onChange={(event) =>
+                          upsertCharacterLock(character.id, {
+                            lockCharacterExpression: event.target.checked
+                          })
+                        }
+                      />
+                      Expression
+                    </label>
+                    <label className="chip">
+                      <input
+                        type="checkbox"
+                        checked={characterLock?.lockCameraFraming ?? false}
+                        onChange={(event) =>
+                          upsertCharacterLock(character.id, {
+                            lockCameraFraming: event.target.checked
+                          })
+                        }
+                      />
+                      Camera
+                    </label>
+                  </div>
+                  <textarea
+                    className="textarea compact"
+                    placeholder={`Optional note for ${character.name}`}
+                    value={characterLock?.note ?? ""}
+                    onChange={(event) =>
+                      upsertCharacterLock(character.id, {
+                        note: event.target.value
+                      })
+                    }
+                  />
+                </div>
                 <div className="stack">
                   <strong>Reference Manager</strong>
                   {character.references.length > 0 ? (

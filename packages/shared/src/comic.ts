@@ -187,6 +187,17 @@ export interface RevisionIntent {
   lockCameraFraming: boolean;
   editPriority: "general" | "expression" | "pose" | "camera" | "lighting";
   changeInstructions: string;
+  characterLocks?: CharacterContinuityLock[];
+}
+
+export interface CharacterContinuityLock {
+  characterId: string;
+  preserveCharacterIdentity?: boolean;
+  lockCharacterAppearance?: boolean;
+  lockCharacterWardrobe?: boolean;
+  lockCharacterExpression?: boolean;
+  lockCameraFraming?: boolean;
+  note?: string;
 }
 
 export interface GenerationSettings {

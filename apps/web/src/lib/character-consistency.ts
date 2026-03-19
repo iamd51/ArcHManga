@@ -1,4 +1,5 @@
 import type {
+  CharacterContinuityLock,
   CharacterContinuityState,
   CharacterConsistencySelection,
   CharacterProfile,
@@ -22,6 +23,65 @@ export interface ContinuityLockSuggestion {
   styleNotes: string;
   revisionIntent: RevisionIntent;
   carriedStates: CharacterContinuityState[];
+}
+
+function mergeCharacterLocks(
+  ...lockGroups: Array<CharacterContinuityLock[] | undefined>
+): CharacterContinuityLock[] {
+  const merged = new Map<string, CharacterContinuityLock>();
+  for (const group of lockGroups) {
+    for (const lock of group ?? []) {
+      const current = merged.get(lock.characterId);
+      merged.set(lock.characterId, {
+        ...current,
+        ...lock
+      });
+    }
+  }
+  return [...merged.values()];
+}
+
+function findCharacterLockOverride(revisionIntent: RevisionIntent, characterId: string) {
+  return revisionIntent.characterLocks?.find((lock) => lock.characterId === characterId);
+}
+
+function buildCharacterRevisionIntent(
+  revisionIntent: RevisionIntent,
+  characterId: string
+): RevisionIntent {
+  const override = findCharacterLockOverride(revisionIntent, characterId);
+  if (!override) {
+    return {
+      ...revisionIntent,
+      characterLocks: revisionIntent.characterLocks ?? []
+    };
+  }
+
+  return {
+    ...revisionIntent,
+    preserveCharacterIdentity:
+      override.preserveCharacterIdentity ?? revisionIntent.preserveCharacterIdentity,
+    lockCharacterAppearance:
+      override.lockCharacterAppearance ?? revisionIntent.lockCharacterAppearance,
+    lockCharacterWardrobe:
+      override.lockCharacterWardrobe ?? revisionIntent.lockCharacterWardrobe,
+    lockCharacterExpression:
+      override.lockCharacterExpression ?? revisionIntent.lockCharacterExpression,
+    lockCameraFraming: override.lockCameraFraming ?? revisionIntent.lockCameraFraming,
+    characterLocks: revisionIntent.characterLocks ?? []
+  };
+}
+
+function buildCharacterLockSummary(lock: CharacterContinuityLock) {
+  const bits = [
+    lock.lockCharacterAppearance === true ? "appearance locked" : "",
+    lock.lockCharacterWardrobe === true ? "wardrobe locked" : "",
+    lock.lockCharacterExpression === true ? "expression locked" : "",
+    lock.lockCameraFraming === true ? "camera locked" : "",
+    lock.preserveCharacterIdentity === true ? "identity protected" : "",
+    lock.note ?? ""
+  ].filter(Boolean);
+  return bits.join(", ");
 }
 
 function resolveContinuityCharacterIds(panel: ComicPanel, previousPanel?: ComicPanel) {
@@ -60,6 +120,7 @@ function selectPreferredRoles(panel: ComicPanel) {
 }
 
 function scoreCharacterConsistency(panel: ComicPanel, character: CharacterProfile, activeReferenceCount: number) {
+  const effectiveRevisionIntent = buildCharacterRevisionIntent(panel.prompt.revisionIntent, character.id);
   let score = 0;
   if (character.appearance) {
     score += 18;
@@ -85,7 +146,7 @@ function scoreCharacterConsistency(panel: ComicPanel, character: CharacterProfil
   if (character.adapter.enabled && activeReferenceCount) {
     score += 8;
   }
-  if (panel.prompt.revisionIntent.preserveCharacterIdentity) {
+  if (effectiveRevisionIntent.preserveCharacterIdentity) {
     score += 6;
   }
   return Math.min(score, 100);
@@ -134,6 +195,7 @@ function buildWarnings(
   selectedReferences: CharacterProfile["references"],
   previousState?: CharacterContinuityState
 ) {
+  const effectiveRevisionIntent = buildCharacterRevisionIntent(panel.prompt.revisionIntent, character.id);
   const roles = new Set(character.references.map((reference) => reference.role));
   const warnings: string[] = [];
   if (!character.references.length) {
@@ -154,7 +216,7 @@ function buildWarnings(
   ) {
     warnings.push("Full-body or outfit anchors are missing for this shot.");
   }
-  if (panel.prompt.revisionIntent.preserveCharacterIdentity && !selectedReferences.length) {
+  if (effectiveRevisionIntent.preserveCharacterIdentity && !selectedReferences.length) {
     warnings.push("Identity lock is enabled, but this panel has no active reference anchors.");
   }
   if (
@@ -172,6 +234,7 @@ export function buildPanelConsistencyPlan(
   previousPanel?: ComicPanel
 ): PanelConsistencyPlan {
   const characterPlans: CharacterConsistencySelection[] = characters.map((character) => {
+    const effectiveRevisionIntent = buildCharacterRevisionIntent(panel.prompt.revisionIntent, character.id);
     const preferredRoles = selectPreferredRoles(panel);
     const previousState = getPreviousCharacterState(previousPanel, character.id);
     const selectedReferences = selectReferenceImages(character, preferredRoles, previousState);
@@ -210,6 +273,21 @@ export function buildPanelConsistencyPlan(
         character.wardrobe ? `${character.name} wardrobe lock: ${character.wardrobe}.` : "",
         character.consistency.expressionDefaults.length
           ? `${character.name} expression baseline: ${character.consistency.expressionDefaults.join(", ")}.`
+          : "",
+        effectiveRevisionIntent.lockCharacterAppearance
+          ? `${character.name} appearance continuity is explicitly locked for this panel.`
+          : "",
+        effectiveRevisionIntent.lockCharacterWardrobe
+          ? `${character.name} wardrobe continuity is explicitly locked for this panel.`
+          : "",
+        effectiveRevisionIntent.lockCharacterExpression
+          ? `${character.name} expression continuity is explicitly locked for this panel.`
+          : "",
+        effectiveRevisionIntent.lockCameraFraming
+          ? `${character.name} framing continuity is explicitly locked for this panel.`
+          : "",
+        findCharacterLockOverride(panel.prompt.revisionIntent, character.id)
+          ? `${character.name} per-character lock override: ${buildCharacterLockSummary(findCharacterLockOverride(panel.prompt.revisionIntent, character.id) as CharacterContinuityLock)}.`
           : "",
         previousState?.expression
           ? `${character.name} carry forward expression: ${previousState.expression}.`
@@ -353,6 +431,19 @@ export function buildContinuityLockSuggestion(
       lockCharacterWardrobe: carriedStates.some((state) => Boolean(state.wardrobe)),
       lockCharacterExpression: carriedStates.some((state) => Boolean(state.expression)),
       lockCameraFraming: carriedStates.some((state) => Boolean(state.framingCue)),
+      characterLocks: mergeCharacterLocks(
+        carriedStates.map((state) => ({
+          characterId: state.characterId,
+          preserveCharacterIdentity: true,
+          lockCharacterAppearance: true,
+          lockCharacterWardrobe: Boolean(state.wardrobe),
+          lockCharacterExpression: Boolean(state.expression),
+          lockCameraFraming: Boolean(state.framingCue),
+          note: `Carry forward ${state.characterName} from previous panel.`
+        })),
+        previousPanel?.prompt.revisionIntent.characterLocks,
+        panel.prompt.revisionIntent.characterLocks
+      ),
       preserveBackground:
         panel.prompt.revisionIntent.preserveBackground || Boolean(previousSnapshot.sceneSummary),
       preserveComposition:
@@ -400,7 +491,11 @@ export function applyContinuityDefaultsToPanel(
       revisionIntent: suggestion
         ? {
             ...panel.prompt.revisionIntent,
-            ...suggestion.revisionIntent
+            ...suggestion.revisionIntent,
+            characterLocks: mergeCharacterLocks(
+              suggestion.revisionIntent.characterLocks,
+              panel.prompt.revisionIntent.characterLocks
+            )
           }
         : panel.prompt.revisionIntent
     }

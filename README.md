@@ -60,6 +60,10 @@ The workspace already includes:
 - new panels, new pages, and storyboard-applied beats now auto-seed continuity defaults from the previous beat so the first draft starts closer to a stable character state
 - panels now expose explicit continuity toggles for appearance, wardrobe, expression, and camera framing so the artist can decide exactly what should persist across beats
 - built-in workflows now map face/body/outfit adapter weights to continuity-aware sources so those panel locks affect the actual ComfyUI payload, not only the prompt text
+- continuity-aware adapter weights are now resolved per character slot, so multi-character panels can keep different appearance, wardrobe, and expression lock strengths in the same workflow
+- director and inspector can now assign continuity overrides per character, so one character can keep wardrobe locked while another is allowed to change expression in the same panel
+- continuity suggestions and new-panel defaults now carry forward those character-specific overrides into add-panel, add-page, and storyboard flows
+- inspector character cards now include one-click continuity presets such as full lock, allow expression, keep look plus outfit, and identity plus camera
 - FastAPI endpoints for bootstrap project data, prompt preview, generation submit, and job polling
 - a mock ComfyUI completion path so the end-to-end UX can be tested before a real worker is connected
 
@@ -96,6 +100,9 @@ The current product focus is a conversational manga-director workflow:
 - automatically backfill adjacent panels with the last known stable continuity state while still letting the artist override those locks explicitly
 - keep continuity decisions legible and local to each panel instead of burying them inside only prompt text or hidden workflow state
 - make continuity locks materially influence generation strength by routing them into adapter-weight decisions and regeneration denoise policy
+- let multi-character panels keep separate continuity weight profiles per slot instead of forcing every character through one shared adapter-strength setting
+- let the artist or director override continuity per character instead of only at panel level, which keeps ensemble scenes flexible without giving up identity stability
+- keep those character-specific overrides alive when the next beat is created, so continuity rules do not silently reset between adjacent panels
 
 ## Getting Started
 
@@ -164,3 +171,5 @@ Verified locally in this workspace:
 - add-panel, add-page, and storyboard flows now prefill continuity-aware prompt, scene, shot, and lock defaults before generation
 - explicit appearance/wardrobe/expression/camera toggles now flow through TypeScript models, FastAPI schemas, prompt preview, and director fallback hints
 - workflow presets and imported binding recommendations now understand continuity-aware adapter weight sources such as appearance, wardrobe, and expression strength
+- multi-character workflow payload checks now confirm slot 1 and slot 2 can receive different continuity-aware adapter weights in the same generation
+- director fallback parsing and workflow payload checks now confirm per-character locks can change slot-specific continuity weights

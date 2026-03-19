@@ -161,7 +161,8 @@ function createDefaultRevisionIntent(): RevisionIntent {
     lockCharacterExpression: false,
     lockCameraFraming: false,
     editPriority: "general",
-    changeInstructions: ""
+    changeInstructions: "",
+    characterLocks: []
   };
 }
 

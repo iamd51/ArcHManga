@@ -24,6 +24,7 @@ function buildDirectorContextSummary(args: {
   sceneContinuity?: string;
   revisionInstructions?: string;
   selectedCharacterNames: string[];
+  characterLockSummary?: string;
   consistencySummary?: string;
   latestDraft?: DirectorDraftResult | null;
 }) {
@@ -39,6 +40,7 @@ function buildDirectorContextSummary(args: {
     args.selectedCharacterNames.length
       ? `Characters in play: ${args.selectedCharacterNames.join(", ")}`
       : "Characters in play: infer from current page context",
+    args.characterLockSummary ? `Character lock overrides: ${args.characterLockSummary}` : "",
     args.consistencySummary ? `Consistency plan: ${args.consistencySummary}` : "",
     args.latestDraft?.assistantMessage ? `Last director note: ${args.latestDraft.assistantMessage}` : ""
   ];
@@ -146,6 +148,22 @@ export function DirectorConsole({ generationPending, onGeneratePanel }: Director
           .join(", ")
       : "",
     selectedCharacterNames: selectedCharacters.map((character) => character.name),
+    characterLockSummary: selectedPanel?.prompt.revisionIntent.characterLocks?.length
+      ? selectedPanel.prompt.revisionIntent.characterLocks
+          .map((lock) => {
+            const characterName =
+              selectedCharacters.find((character) => character.id === lock.characterId)?.name ?? lock.characterId;
+            const bits = [
+              lock.lockCharacterAppearance ? "appearance" : "",
+              lock.lockCharacterWardrobe ? "wardrobe" : "",
+              lock.lockCharacterExpression ? "expression" : "",
+              lock.lockCameraFraming ? "camera" : "",
+              lock.preserveCharacterIdentity ? "identity" : ""
+            ].filter(Boolean);
+            return `${characterName}: ${bits.join("/")}`;
+          })
+          .join(" | ")
+      : "",
     consistencySummary: consistencyPlan?.summary,
     latestDraft
   });
@@ -387,6 +405,23 @@ export function DirectorConsole({ generationPending, onGeneratePanel }: Director
                 <span className="chip">
                   Edit target: {latestDraft.panelSuggestion.revisionIntent.editPriority}
                 </span>
+                {(latestDraft.panelSuggestion.revisionIntent.characterLocks ?? []).map((lock) => {
+                  const characterName =
+                    project.characters.find((character) => character.id === lock.characterId)?.name ?? lock.characterId;
+                  const label = [
+                    lock.lockCharacterAppearance ? "appearance" : "",
+                    lock.lockCharacterWardrobe ? "wardrobe" : "",
+                    lock.lockCharacterExpression ? "expression" : "",
+                    lock.lockCameraFraming ? "camera" : ""
+                  ]
+                    .filter(Boolean)
+                    .join("/");
+                  return label ? (
+                    <span key={`${lock.characterId}-${label}`} className="chip active">
+                      {characterName}: {label}
+                    </span>
+                  ) : null;
+                })}
                 {suggestedMaskPreset ? (
                   <span className="chip active">Mask template: {suggestedMaskPreset.label}</span>
                 ) : null}

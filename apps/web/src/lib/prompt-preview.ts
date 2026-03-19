@@ -30,6 +30,21 @@ function buildRevisionHints(panel: ComicPanel) {
   if (panel.prompt.revisionIntent.changeInstructions) {
     hints.push(`Revision note: ${panel.prompt.revisionIntent.changeInstructions}`);
   }
+  for (const characterLock of panel.prompt.revisionIntent.characterLocks ?? []) {
+    const lockSummary = [
+      characterLock.lockCharacterAppearance ? "appearance" : "",
+      characterLock.lockCharacterWardrobe ? "wardrobe" : "",
+      characterLock.lockCharacterExpression ? "expression" : "",
+      characterLock.lockCameraFraming ? "camera" : "",
+      characterLock.preserveCharacterIdentity ? "identity" : "",
+      characterLock.note ?? ""
+    ]
+      .filter(Boolean)
+      .join(", ");
+    if (lockSummary) {
+      hints.push(`Per-character lock for ${characterLock.characterId}: ${lockSummary}.`);
+    }
+  }
   if (panel.inpaintMask.enabled) {
     hints.push("Use the active inpaint mask to limit the redraw area.");
   }
