@@ -64,6 +64,7 @@ The workspace already includes:
 - director and inspector can now assign continuity overrides per character, so one character can keep wardrobe locked while another is allowed to change expression in the same panel
 - continuity suggestions and new-panel defaults now carry forward those character-specific overrides into add-panel, add-page, and storyboard flows
 - inspector character cards now include one-click continuity presets such as full lock, allow expression, keep look plus outfit, and identity plus camera
+- director fallback parsing now understands more natural multi-character commands such as full lock, allow-expression-only, and camera-stays-fixed phrasing
 - FastAPI endpoints for bootstrap project data, prompt preview, generation submit, and job polling
 - a mock ComfyUI completion path so the end-to-end UX can be tested before a real worker is connected
 

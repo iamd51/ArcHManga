@@ -433,6 +433,14 @@ class QwenPromptService:
             f"Primary shot: {panel_suggestion.shot_type or shot_type or 'medium shot'}.",
             f"Characters in focus: {', '.join(selected_character_ids) if selected_character_ids else 'keep current cast'}.",
         ]
+        if panel_suggestion.revision_intent and panel_suggestion.revision_intent.character_locks:
+            assistant_lines.append(
+                "Parsed character locks: "
+                + " | ".join(
+                    self._summarize_character_lock_for_director(lock)
+                    for lock in panel_suggestion.revision_intent.character_locks
+                )
+            )
         if payload.context_summary:
             assistant_lines.append(f"Working memory: {payload.context_summary}")
         if scene_suggestion.continuity_notes:
@@ -644,11 +652,19 @@ class QwenPromptService:
         lowered = payload.user_message.lower()
         preserve_composition = base.preserve_composition or any(
             token in payload.user_message or token in lowered
-            for token in ["保留構圖", "保持構圖", "同構圖", "keep composition", "same composition"]
+            for token in [
+                "保留構圖",
+                "保持構圖",
+                "同構圖",
+                "構圖不變",
+                "構圖不要變",
+                "keep composition",
+                "same composition",
+            ]
         )
         preserve_background = base.preserve_background or any(
             token in payload.user_message or token in lowered
-            for token in ["背景不變", "保持背景", "same background", "keep background"]
+            for token in ["背景不變", "背景不要變", "保持背景", "same background", "keep background"]
         )
         preserve_character_identity = base.preserve_character_identity or any(
             token in payload.user_message or token in lowered
@@ -668,7 +684,16 @@ class QwenPromptService:
         )
         lock_camera_framing = base.lock_camera_framing or any(
             token in payload.user_message or token in lowered
-            for token in ["延續鏡頭", "保持鏡頭", "same shot", "keep framing", "camera lock"]
+            for token in [
+                "延續鏡頭",
+                "保持鏡頭",
+                "鏡頭不變",
+                "鏡頭不要變",
+                "鏡頭維持一樣",
+                "same shot",
+                "keep framing",
+                "camera lock",
+            ]
         )
         edit_priority = base.edit_priority
         priority_map = {
@@ -780,6 +805,11 @@ class QwenPromptService:
             )
             segment = self._extract_character_segment(user_message, character.name)
             segment_lowered = segment.lower()
+            preset_name = self._detect_character_lock_preset(segment)
+            if preset_name:
+                preset_values = self._build_character_lock_preset(preset_name, character.name)
+                for field_name, value in preset_values.items():
+                    setattr(lock, field_name, value)
             positive_specs = [
                 ("preserve_character_identity", ["保留角色", "角色一致", "keep identity", "same character"]),
                 ("lock_character_appearance", ["延續外觀", "保持外觀", "外觀", "same appearance", "keep face"]),
@@ -809,6 +839,15 @@ class QwenPromptService:
                     for token in tokens
                 ):
                     setattr(lock, field_name, False)
+            if self._segment_requests_only_expression_change(segment):
+                lock.preserve_character_identity = True
+                lock.lock_character_appearance = True
+                lock.lock_character_wardrobe = True
+                lock.lock_character_expression = False
+            if self._segment_requests_only_camera_hold(segment):
+                lock.preserve_character_identity = True
+                lock.lock_character_appearance = True
+                lock.lock_camera_framing = True
             if any(
                 getattr(lock, field_name) is not None
                 for field_name in [
@@ -819,7 +858,7 @@ class QwenPromptService:
                     "lock_camera_framing",
                 ]
             ):
-                lock.note = f"Director override from request for {character.name}."
+                lock.note = self._build_character_lock_note(character.name, preset_name)
                 character_locks.append(lock)
         if not character_locks:
             return base.character_locks
@@ -853,6 +892,115 @@ class QwenPromptService:
                 if token in clause or token_lowered in lowered_clause:
                     return True
         return False
+
+    def _detect_character_lock_preset(self, segment: str) -> str | None:
+        lowered = segment.lower()
+        presets = {
+            "full-lock": ["全鎖", "全部鎖住", "全部鎖定", "完全固定", "full lock", "lock everything"],
+            "allow-expression": [
+                "只放開表情",
+                "只改表情",
+                "表情可以改",
+                "只讓表情變",
+                "allow expression",
+            ],
+            "keep-look-outfit": [
+                "保持外觀和服裝",
+                "保留外觀和服裝",
+                "外觀和服裝不變",
+                "keep look and outfit",
+            ],
+            "identity-camera": [
+                "鏡頭不變",
+                "鏡頭維持一樣",
+                "保持鏡頭",
+                "identity and camera",
+            ],
+        }
+        for preset_name, tokens in presets.items():
+            if any(token in segment or token in lowered for token in tokens):
+                return preset_name
+        return None
+
+    def _build_character_lock_preset(self, preset_name: str, character_name: str) -> dict[str, bool]:
+        presets = {
+            "full-lock": {
+                "preserve_character_identity": True,
+                "lock_character_appearance": True,
+                "lock_character_wardrobe": True,
+                "lock_character_expression": True,
+                "lock_camera_framing": True,
+            },
+            "allow-expression": {
+                "preserve_character_identity": True,
+                "lock_character_appearance": True,
+                "lock_character_wardrobe": True,
+                "lock_character_expression": False,
+                "lock_camera_framing": False,
+            },
+            "keep-look-outfit": {
+                "preserve_character_identity": True,
+                "lock_character_appearance": True,
+                "lock_character_wardrobe": True,
+                "lock_character_expression": False,
+                "lock_camera_framing": False,
+            },
+            "identity-camera": {
+                "preserve_character_identity": True,
+                "lock_character_appearance": True,
+                "lock_character_wardrobe": False,
+                "lock_character_expression": False,
+                "lock_camera_framing": True,
+            },
+        }
+        return presets.get(preset_name, {})
+
+    def _segment_requests_only_expression_change(self, segment: str) -> bool:
+        lowered = segment.lower()
+        return any(
+            token in segment or token in lowered
+            for token in [
+                "只放開表情",
+                "只改表情",
+                "只讓表情變",
+                "表情可以改",
+                "只動表情",
+                "only expression",
+            ]
+        )
+
+    def _segment_requests_only_camera_hold(self, segment: str) -> bool:
+        lowered = segment.lower()
+        return any(
+            token in segment or token in lowered
+            for token in ["鏡頭不變", "鏡頭維持一樣", "保持鏡頭", "same shot", "keep framing"]
+        )
+
+    def _build_character_lock_note(self, character_name: str, preset_name: str | None) -> str:
+        if preset_name == "full-lock":
+            return f"Director preset for {character_name}: full lock."
+        if preset_name == "allow-expression":
+            return f"Director preset for {character_name}: allow expression changes."
+        if preset_name == "keep-look-outfit":
+            return f"Director preset for {character_name}: keep look and outfit."
+        if preset_name == "identity-camera":
+            return f"Director preset for {character_name}: keep identity and camera."
+        return f"Director override from request for {character_name}."
+
+    def _summarize_character_lock_for_director(self, character_lock: CharacterContinuityLock) -> str:
+        labels = [
+            "identity" if character_lock.preserve_character_identity else "",
+            "appearance" if character_lock.lock_character_appearance else "",
+            "wardrobe" if character_lock.lock_character_wardrobe else "",
+            "expression" if character_lock.lock_character_expression else "",
+            "camera" if character_lock.lock_camera_framing else "",
+            "expression free" if character_lock.lock_character_expression is False else "",
+            "wardrobe free" if character_lock.lock_character_wardrobe is False else "",
+            "appearance free" if character_lock.lock_character_appearance is False else "",
+            "camera free" if character_lock.lock_camera_framing is False else "",
+        ]
+        summary = ", ".join(label for label in labels if label)
+        return f"{character_lock.character_id}: {summary or 'custom override'}"
 
     def _suggest_beat_shot(self, index: int, panel_count: int) -> str:
         if panel_count == 1:

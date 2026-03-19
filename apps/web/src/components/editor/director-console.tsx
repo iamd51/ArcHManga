@@ -339,7 +339,7 @@ export function DirectorConsole({ generationPending, onGeneratePanel }: Director
           className="textarea compact"
           value={input}
           onChange={(event) => setInput(event.target.value)}
-          placeholder="Example: 幫我把這段劇情拆成 4 格，先建立雨夜便利商店外景，最後一格做 Rin 的反應特寫。"
+          placeholder="Example: Rin 全鎖，Kai 只放開表情，鏡頭不變。或是幫我把這段劇情拆成 4 格。"
         />
         <div className="toolbar-actions">
           <button
@@ -412,7 +412,11 @@ export function DirectorConsole({ generationPending, onGeneratePanel }: Director
                     lock.lockCharacterAppearance ? "appearance" : "",
                     lock.lockCharacterWardrobe ? "wardrobe" : "",
                     lock.lockCharacterExpression ? "expression" : "",
-                    lock.lockCameraFraming ? "camera" : ""
+                    lock.lockCameraFraming ? "camera" : "",
+                    lock.lockCharacterExpression === false ? "expression free" : "",
+                    lock.lockCharacterWardrobe === false ? "wardrobe free" : "",
+                    lock.lockCharacterAppearance === false ? "appearance free" : "",
+                    lock.lockCameraFraming === false ? "camera free" : ""
                   ]
                     .filter(Boolean)
                     .join("/");
