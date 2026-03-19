@@ -24,6 +24,10 @@ export interface ContinuityLockSuggestion {
   carriedStates: CharacterContinuityState[];
 }
 
+function resolveContinuityCharacterIds(panel: ComicPanel, previousPanel?: ComicPanel) {
+  return panel.characterIds.length ? panel.characterIds : previousPanel?.characterIds ?? [];
+}
+
 function resolveReadiness(score: number): PanelConsistencyPlan["readiness"] {
   if (score >= 75) {
     return "strong";
@@ -306,8 +310,9 @@ export function buildContinuityLockSuggestion(
     return null;
   }
 
+  const continuityCharacterIds = resolveContinuityCharacterIds(panel, previousPanel);
   const carriedStates = previousSnapshot.characterStates.filter((state) =>
-    panel.characterIds.includes(state.characterId)
+    continuityCharacterIds.includes(state.characterId)
   );
   if (!carriedStates.length) {
     return null;
@@ -351,6 +356,50 @@ export function buildContinuityLockSuggestion(
         carriedStates.some((state) => Boolean(state.framingCue && state.framingCue === shotType))
     },
     carriedStates
+  };
+}
+
+export function applyContinuityDefaultsToPanel(
+  panel: ComicPanel,
+  previousPanel: ComicPanel | undefined,
+  characters: CharacterProfile[]
+): ComicPanel {
+  if (!previousPanel) {
+    return panel;
+  }
+
+  const continuityCharacterIds = resolveContinuityCharacterIds(panel, previousPanel);
+  const suggestion = buildContinuityLockSuggestion(
+    {
+      ...panel,
+      characterIds: continuityCharacterIds
+    },
+    previousPanel,
+    characters
+  );
+
+  return {
+    ...panel,
+    mode: panel.mode || previousPanel.mode,
+    modelId: panel.modelId || previousPanel.modelId,
+    workflowPresetId: panel.workflowPresetId || previousPanel.workflowPresetId,
+    characterIds: continuityCharacterIds,
+    sceneMemoryId: panel.sceneMemoryId ?? previousPanel.sceneMemoryId,
+    prompt: {
+      ...panel.prompt,
+      prompt: panel.prompt.prompt || suggestion?.promptSeed || "",
+      sceneSummary:
+        panel.prompt.sceneSummary || suggestion?.sceneSummary || previousPanel.prompt.sceneSummary,
+      shotType: panel.prompt.shotType || suggestion?.shotType || previousPanel.prompt.shotType,
+      styleNotes:
+        panel.prompt.styleNotes || suggestion?.styleNotes || previousPanel.prompt.styleNotes,
+      revisionIntent: suggestion
+        ? {
+            ...panel.prompt.revisionIntent,
+            ...suggestion.revisionIntent
+          }
+        : panel.prompt.revisionIntent
+    }
   };
 }
 

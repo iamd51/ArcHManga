@@ -14,6 +14,7 @@ import type {
   RevisionIntent,
   WorkflowPreset
 } from "@archmanga/shared";
+import { applyContinuityDefaultsToPanel } from "@/lib/character-consistency";
 import { defaultProject } from "@/lib/default-data";
 
 interface EditorState {
@@ -198,12 +199,16 @@ function normalizeProject(project: ComicProject): ComicProject {
   };
 }
 
-function buildNewPanel(project: ComicProject, panelsLength: number, mode: GenerationMode): ComicPanel {
+function buildNewPanel(
+  project: ComicProject,
+  panelsLength: number,
+  mode: GenerationMode,
+  previousPanel?: ComicPanel
+): ComicPanel {
   const workflow = getDefaultWorkflow(project, mode);
   const model = getDefaultModel(project, mode);
   const sceneMemory = project.sceneMemories[0];
-
-  return {
+  const basePanel: ComicPanel = {
     id: createPanelId(),
     title: `Panel ${panelsLength + 1}`,
     x: 96,
@@ -240,15 +245,21 @@ function buildNewPanel(project: ComicProject, panelsLength: number, mode: Genera
       denoise: 1
     }
   };
+  const continuityCharacters = project.characters.filter((character) =>
+    (previousPanel?.characterIds ?? []).includes(character.id)
+  );
+  return applyContinuityDefaultsToPanel(basePanel, previousPanel, continuityCharacters);
 }
 
 function buildNewPage(project: ComicProject, pagesLength: number): ComicProject["pages"][number] {
+  const previousPage = project.pages[pagesLength - 1];
+  const previousPanel = previousPage?.panels[previousPage.panels.length - 1];
   return {
     id: createPageId(),
     title: `Page ${String(pagesLength + 1).padStart(2, "0")}`,
     width: 852,
     height: 1200,
-    panels: [buildNewPanel(project, 0, "bw")]
+    panels: [buildNewPanel(project, 0, previousPanel?.mode ?? "bw", previousPanel)]
   };
 }
 
@@ -269,7 +280,8 @@ function buildStoryboardPanels(
   mode: GenerationMode,
   characterIds: string[],
   sceneMemoryId?: string,
-  styleNotes?: string
+  styleNotes?: string,
+  seedPanel?: ComicPanel
 ): ComicPanel[] {
   const template = getTemplateForBeatCount(project, beats.length);
   const frames = template?.panels.slice(0, beats.length) ?? beats.map((_, index) => ({
@@ -280,10 +292,11 @@ function buildStoryboardPanels(
     rotation: 0
   }));
 
-  return beats.map((beat, index) => {
+  return beats.reduce<ComicPanel[]>((panels, beat, index) => {
     const frame = frames[index];
-    const nextPanel = buildNewPanel(project, index, beat.mode ?? mode);
-    return {
+    const previousPanel = panels[index - 1] ?? seedPanel;
+    const nextPanel = buildNewPanel(project, index, beat.mode ?? mode, previousPanel);
+    const stagedPanel: ComicPanel = {
       ...nextPanel,
       title: beat.title,
       x: frame.x,
@@ -291,14 +304,14 @@ function buildStoryboardPanels(
       width: frame.width,
       height: frame.height,
       mode: beat.mode ?? mode,
-      characterIds,
-      sceneMemoryId,
+      characterIds: characterIds.length ? characterIds : previousPanel?.characterIds ?? [],
+      sceneMemoryId: sceneMemoryId ?? previousPanel?.sceneMemoryId,
       prompt: {
         prompt: beat.description,
         negativePrompt: nextPanel.prompt.negativePrompt,
         sceneSummary: beat.description,
         shotType: beat.shotType,
-        styleNotes: styleNotes ?? "",
+        styleNotes: styleNotes ?? previousPanel?.prompt.styleNotes ?? "",
         revisionIntent: nextPanel.prompt.revisionIntent
       },
       generation: {
@@ -307,7 +320,11 @@ function buildStoryboardPanels(
         height: Math.round(frame.height)
       }
     };
-  });
+    const continuityCharacters = project.characters.filter((character) =>
+      stagedPanel.characterIds.includes(character.id)
+    );
+    return [...panels, applyContinuityDefaultsToPanel(stagedPanel, previousPanel, continuityCharacters)];
+  }, []);
 }
 
 export const useEditorStore = create<EditorState>((set, get) => ({
@@ -553,13 +570,19 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   applyDirectorStoryboard: (payload) => {
     const { selectedPageId } = get();
     set((state) => {
+      const currentPage =
+        state.project.pages.find((page) => page.id === selectedPageId) ?? state.project.pages[0];
+      const seedPanel =
+        currentPage?.panels.find((panel) => panel.id === state.selectedPanelId) ??
+        currentPage?.panels[currentPage.panels.length - 1];
       const nextPanels = buildStoryboardPanels(
         state.project,
         payload.beats,
         payload.mode ?? "bw",
         payload.characterIds ?? [],
         payload.sceneMemoryId,
-        payload.styleNotes
+        payload.styleNotes,
+        seedPanel
       );
       return {
         project: updateCurrentPage(state.project, selectedPageId, () => nextPanels),
@@ -572,10 +595,12 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   addPanel: () => {
     const { selectedPageId } = get();
     set((state) => ({
-      project: updateCurrentPage(state.project, selectedPageId, (panels) => [
-        ...panels,
-        buildNewPanel(state.project, panels.length, "color")
-      ]),
+      project: updateCurrentPage(state.project, selectedPageId, (panels) => {
+        const previousPanel =
+          panels.find((panel) => panel.id === state.selectedPanelId) ?? panels[panels.length - 1];
+        const nextMode = previousPanel?.mode ?? "color";
+        return [...panels, buildNewPanel(state.project, panels.length, nextMode, previousPanel)];
+      }),
       isDirty: true
     }));
   },
