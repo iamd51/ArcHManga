@@ -1,5 +1,5 @@
 import type { CharacterProfile, ComicPanel, WorkflowPreset } from "@archmanga/shared";
-import { buildPanelConsistencyPlan } from "@/lib/character-consistency";
+import { buildContinuityLockSuggestion, buildPanelConsistencyPlan } from "@/lib/character-consistency";
 
 function buildRevisionHints(panel: ComicPanel) {
   const hints: string[] = [];
@@ -32,6 +32,7 @@ export function buildPromptPreview(
 ) {
   const consistencyPlan = buildPanelConsistencyPlan(panel, characters, previousPanel);
   const previousSnapshot = previousPanel?.continuitySnapshot;
+  const continuityLockSuggestion = buildContinuityLockSuggestion(panel, previousPanel, characters);
   const characterLine = consistencyPlan.characterPlans
     .map(
       (plan) =>
@@ -42,6 +43,7 @@ export function buildPromptPreview(
   const continuityHints = [
     panel.prompt.sceneSummary || "Carry over location, weather, and emotional tone from prior panel.",
     previousSnapshot?.continuitySummary ? `Previous panel lock: ${previousSnapshot.continuitySummary}` : "",
+    continuityLockSuggestion?.summary ?? "",
     panel.prompt.shotType ? `Preferred shot: ${panel.prompt.shotType}` : "",
     panel.prompt.styleNotes ? `Style anchor: ${panel.prompt.styleNotes}` : "",
     ...buildRevisionHints(panel),
@@ -53,6 +55,7 @@ export function buildPromptPreview(
   const optimizedPrompt = [
     workflow?.promptPrefix,
     panel.prompt.prompt,
+    continuityLockSuggestion?.summary ? `Continuity locks: ${continuityLockSuggestion.summary}` : "",
     characterLine ? `Character anchors: ${characterLine}` : "",
     previousSnapshot?.characterStates.length
       ? `Carry forward continuity states: ${previousSnapshot.characterStates

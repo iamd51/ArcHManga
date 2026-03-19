@@ -237,6 +237,8 @@ def build_workflow_payload(
         "previous_panel_snapshot": previous_panel.continuity_snapshot.model_dump(by_alias=True)
         if previous_panel and previous_panel.continuity_snapshot
         else None,
+        "continuity_lock_summary": _build_continuity_lock_summary(panel, previous_panel),
+        "continuity_locked_characters": _build_continuity_locked_characters(panel, previous_panel),
         "source_image_url": panel.image_url,
         "mask_image_url": values["mask_image_url"],
         "computed_denoise": values["denoise"],
@@ -365,6 +367,49 @@ def _resolve_denoise_value(panel: ComicPanel) -> float:
     if revision_intent.preserve_character_identity:
         return 0.36
     return max(0.45, float(panel.generation.denoise))
+
+
+def _build_continuity_lock_summary(panel: ComicPanel, previous_panel: ComicPanel | None) -> str | None:
+    if not previous_panel or not previous_panel.continuity_snapshot:
+        return None
+    states = [
+        state
+        for state in previous_panel.continuity_snapshot.character_states
+        if state.character_id in panel.character_ids
+    ]
+    if not states:
+        return None
+    bits = []
+    for state in states:
+        state_bits = [
+            state.character_name,
+            f"expression={state.expression}" if state.expression else "",
+            f"wardrobe={state.wardrobe}" if state.wardrobe else "",
+            f"framing={state.framing_cue}" if state.framing_cue else "",
+        ]
+        bits.append(", ".join(bit for bit in state_bits if bit))
+    return "Carry forward " + " | ".join(bits)
+
+
+def _build_continuity_locked_characters(panel: ComicPanel, previous_panel: ComicPanel | None) -> list[dict]:
+    if not previous_panel or not previous_panel.continuity_snapshot:
+        return []
+    locked_states = []
+    for state in previous_panel.continuity_snapshot.character_states:
+        if state.character_id not in panel.character_ids:
+            continue
+        locked_states.append(
+            {
+                "character_id": state.character_id,
+                "character_name": state.character_name,
+                "expression": state.expression,
+                "wardrobe": state.wardrobe,
+                "pose_cue": state.pose_cue,
+                "framing_cue": state.framing_cue,
+                "carried_reference_ids": state.carried_reference_ids,
+            }
+        )
+    return locked_states
 
 
 def _build_mask_data_url(panel: ComicPanel) -> str | None:

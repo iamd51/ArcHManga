@@ -56,6 +56,7 @@ The workspace already includes:
 - built-in SDXL workflows now chain multiple adapter stages so face, body, and outfit anchors can all participate in one generation pass
 - successful renders now write a panel continuity snapshot so later beats can carry forward character state instead of relying only on the raw prompt
 - prompt preview, preflight, and workflow payloads now pull forward the previous panel continuity snapshot so character outfit, expression, and framing locks influence the next render before generation starts
+- the inspector now exposes carry-forward continuity locks so you can explicitly apply previous-panel outfit, expression, and framing state before generating the next panel
 - FastAPI endpoints for bootstrap project data, prompt preview, generation submit, and job polling
 - a mock ComfyUI completion path so the end-to-end UX can be tested before a real worker is connected
 
@@ -88,6 +89,7 @@ The current product focus is a conversational manga-director workflow:
 - adjust the inpaint area directly on the canvas while keeping the underlying panel layout intact
 - let the director suggest a sensible mask template automatically for expression, pose, lighting, and prop-level fixes
 - feed previous-panel continuity snapshots back into prompt planning and workflow binding so adjacent panels inherit proven character state instead of starting from raw references each time
+- let the artist explicitly accept suggested continuity locks instead of hiding all carry-forward behavior behind automatic prompt assembly
 
 ## Getting Started
 
@@ -152,3 +154,4 @@ Verified locally in this workspace:
 - bootstrap migration checks for newly added regeneration presets via `TestClient`
 - rectangular inpaint-mask payload generation via Python checks
 - previous-panel continuity snapshot carry-forward now affects preflight, prompt preview, and workflow payload generation
+- continuity-lock suggestions can now be applied from the inspector and are also echoed into workflow `meta` for debugging downstream ComfyUI runs

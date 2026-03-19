@@ -3,6 +3,7 @@ import type {
   CharacterConsistencySelection,
   CharacterProfile,
   ComicPanel,
+  RevisionIntent,
   PanelContinuitySnapshot,
   PanelConsistencyPlan
 } from "@archmanga/shared";
@@ -11,6 +12,16 @@ export interface ConsistencyPreflight {
   status: "ready" | "caution" | "blocked";
   title: string;
   reasons: string[];
+}
+
+export interface ContinuityLockSuggestion {
+  summary: string;
+  promptSeed: string;
+  sceneSummary: string;
+  shotType: string;
+  styleNotes: string;
+  revisionIntent: RevisionIntent;
+  carriedStates: CharacterContinuityState[];
 }
 
 function resolveReadiness(score: number): PanelConsistencyPlan["readiness"] {
@@ -282,6 +293,64 @@ export function buildConsistencyPreflight(plan: PanelConsistencyPlan): Consisten
     status: "ready",
     title: "Consistency anchors look strong",
     reasons: plan.globalHints
+  };
+}
+
+export function buildContinuityLockSuggestion(
+  panel: ComicPanel,
+  previousPanel: ComicPanel | undefined,
+  characters: CharacterProfile[]
+): ContinuityLockSuggestion | null {
+  const previousSnapshot = previousPanel?.continuitySnapshot;
+  if (!previousSnapshot) {
+    return null;
+  }
+
+  const carriedStates = previousSnapshot.characterStates.filter((state) =>
+    panel.characterIds.includes(state.characterId)
+  );
+  if (!carriedStates.length) {
+    return null;
+  }
+
+  const stateSummary = carriedStates
+    .map((state) => {
+      const bits = [
+        state.characterName,
+        state.expression ? `expression ${state.expression}` : "",
+        state.wardrobe ? `wardrobe ${state.wardrobe}` : "",
+        state.framingCue ? `framing ${state.framingCue}` : ""
+      ].filter(Boolean);
+      return bits.join(", ");
+    })
+    .join(" | ");
+
+  const styleNotes = Array.from(
+    new Set([panel.prompt.styleNotes, previousSnapshot.styleNotes].filter(Boolean))
+  ).join(", ");
+  const shotType = panel.prompt.shotType || previousSnapshot.shotType || carriedStates[0]?.framingCue || "";
+  const sceneSummary =
+    panel.prompt.sceneSummary || previousSnapshot.sceneSummary || "Continue the same scene state.";
+  const promptSeed = panel.prompt.prompt.trim()
+    ? panel.prompt.prompt
+    : `Continue the previous beat while keeping ${stateSummary}.`;
+
+  return {
+    summary: `Carry forward ${stateSummary}.`,
+    promptSeed,
+    sceneSummary,
+    shotType,
+    styleNotes,
+    revisionIntent: {
+      ...panel.prompt.revisionIntent,
+      preserveCharacterIdentity: true,
+      preserveBackground:
+        panel.prompt.revisionIntent.preserveBackground || Boolean(previousSnapshot.sceneSummary),
+      preserveComposition:
+        panel.prompt.revisionIntent.preserveComposition ||
+        carriedStates.some((state) => Boolean(state.framingCue && state.framingCue === shotType))
+    },
+    carriedStates
   };
 }
 

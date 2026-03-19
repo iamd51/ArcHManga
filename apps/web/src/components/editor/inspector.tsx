@@ -2,7 +2,10 @@
 
 import Image from "next/image";
 import { useMutation } from "@tanstack/react-query";
-import { buildConsistencyPreflight } from "@/lib/character-consistency";
+import {
+  buildConsistencyPreflight,
+  buildContinuityLockSuggestion
+} from "@/lib/character-consistency";
 import { MASK_PRESETS, applyMaskPreset } from "@/lib/mask-presets";
 import {
   deleteCharacterReference,
@@ -186,6 +189,11 @@ export function Inspector({
   const preview =
     promptPreview ??
     buildPromptPreview(selectedPanel, selectedWorkflow ?? undefined, attachedCharacters, previousPanel);
+  const continuityLockSuggestion = buildContinuityLockSuggestion(
+    selectedPanel,
+    previousPanel,
+    attachedCharacters
+  );
   const consistencyPlanByCharacterId = new Map(
     preview.consistencyPlan.characterPlans.map((plan) => [plan.characterId, plan])
   );
@@ -210,6 +218,18 @@ export function Inspector({
         ];
   const referenceRoleOptions = ["primary", "face", "full-body", "expression", "outfit", "support"] as const;
   const referenceAngleOptions = ["front", "three-quarter", "profile", "full-body", "expression"] as const;
+  const applyContinuityLocks = () => {
+    if (!continuityLockSuggestion) {
+      return;
+    }
+    updatePanelPrompt(selectedPanel.id, {
+      prompt: continuityLockSuggestion.promptSeed,
+      sceneSummary: continuityLockSuggestion.sceneSummary,
+      shotType: continuityLockSuggestion.shotType,
+      styleNotes: continuityLockSuggestion.styleNotes,
+      revisionIntent: continuityLockSuggestion.revisionIntent
+    });
+  };
 
   return (
     <aside className="surface inspector">
@@ -788,6 +808,38 @@ export function Inspector({
           </div>
         </div>
       </section>
+
+      {continuityLockSuggestion ? (
+        <section className="panel-section">
+          <div className="status-row">
+            <h3>Carry-Forward Locks</h3>
+            <button className="button subtle" type="button" onClick={applyContinuityLocks}>
+              Apply continuity locks
+            </button>
+          </div>
+          <div className="hint-box">{continuityLockSuggestion.summary}</div>
+          <div className="meta-row">
+            {continuityLockSuggestion.carriedStates.map((state) => (
+              <span key={state.characterId} className="chip active">
+                {state.characterName}
+                {state.expression ? ` · ${state.expression}` : ""}
+                {state.wardrobe ? ` · ${state.wardrobe}` : ""}
+              </span>
+            ))}
+          </div>
+          <div className="hint-box">
+            <strong>Suggested scene lock</strong>
+            <br />
+            {continuityLockSuggestion.sceneSummary}
+            {continuityLockSuggestion.shotType ? (
+              <>
+                <br />
+                Shot: {continuityLockSuggestion.shotType}
+              </>
+            ) : null}
+          </div>
+        </section>
+      ) : null}
 
       <section className="panel-section">
         <h3>Character Anchors</h3>
