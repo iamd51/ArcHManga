@@ -7,9 +7,11 @@ import type {
   ComicPageTemplate,
   ComicPanel,
   ComicProject,
+  DirectorBeat,
   GenerationJobState,
   GenerationMode,
   PromptPreview,
+  RevisionIntent,
   WorkflowPreset
 } from "@archmanga/shared";
 import { defaultProject } from "@/lib/default-data";
@@ -38,6 +40,7 @@ interface EditorState {
       >
     >
   ) => void;
+  updatePanelInpaintMask: (panelId: string, updates: Partial<ComicPanel["inpaintMask"]>) => void;
   updatePanelGeneration: (panelId: string, updates: Partial<ComicPanel["generation"]>) => void;
   updateSceneMemory: (
     sceneMemoryId: string,
@@ -47,6 +50,13 @@ interface EditorState {
   replaceModels: (models: ComicProject["models"]) => void;
   addPage: () => void;
   duplicateCurrentPage: () => void;
+  applyDirectorStoryboard: (payload: {
+    beats: DirectorBeat[];
+    mode?: GenerationMode;
+    characterIds?: string[];
+    sceneMemoryId?: string;
+    styleNotes?: string;
+  }) => void;
   addPanel: () => void;
   duplicateSelectedPanel: () => void;
   setPromptPreview: (preview: PromptPreview | null) => void;
@@ -113,6 +123,7 @@ function updateCurrentPage(
 
 function getDefaultWorkflow(project: ComicProject, mode: GenerationMode) {
   return (
+    project.workflows.find((workflow) => workflow.mode === mode && !workflow.controls.includes("img2img")) ??
     project.workflows.find((workflow) => workflow.mode === mode) ??
     project.workflows[0] ??
     defaultProject.workflows[0]
@@ -133,6 +144,54 @@ function createPanelId() {
 
 function createPageId() {
   return `page-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+function createDefaultRevisionIntent(): RevisionIntent {
+  return {
+    preserveComposition: false,
+    preserveBackground: false,
+    preserveCharacterIdentity: true,
+    editPriority: "general",
+    changeInstructions: ""
+  };
+}
+
+function createDefaultInpaintMask(): ComicPanel["inpaintMask"] {
+  return {
+    enabled: false,
+    x: 0.25,
+    y: 0.2,
+    width: 0.5,
+    height: 0.4,
+    feather: 24
+  };
+}
+
+function ensurePanelRevisionIntent(panel: ComicPanel): ComicPanel {
+  return {
+    ...panel,
+    inpaintMask: {
+      ...createDefaultInpaintMask(),
+      ...(panel.inpaintMask ?? {})
+    },
+    prompt: {
+      ...panel.prompt,
+      revisionIntent: {
+        ...createDefaultRevisionIntent(),
+        ...(panel.prompt.revisionIntent ?? {})
+      }
+    }
+  };
+}
+
+function normalizeProject(project: ComicProject): ComicProject {
+  return {
+    ...project,
+    pages: project.pages.map((page) => ({
+      ...page,
+      panels: page.panels.map((panel) => ensurePanelRevisionIntent(panel))
+    }))
+  };
 }
 
 function buildNewPanel(project: ComicProject, panelsLength: number, mode: GenerationMode): ComicPanel {
@@ -159,8 +218,10 @@ function buildNewPanel(project: ComicProject, panelsLength: number, mode: Genera
       negativePrompt: "",
       sceneSummary: sceneMemory?.continuityNotes ?? "",
       shotType: "",
-      styleNotes: ""
+      styleNotes: "",
+      revisionIntent: createDefaultRevisionIntent()
     },
+    inpaintMask: createDefaultInpaintMask(),
     generation: {
       width: 320,
       height: 220,
@@ -187,6 +248,64 @@ function buildNewPage(project: ComicProject, pagesLength: number): ComicProject[
   };
 }
 
+function getTemplateForBeatCount(project: ComicProject, beatCount: number): ComicPageTemplate | null {
+  const exact = project.templates.find((template) => template.panels.length === beatCount);
+  if (exact) {
+    return exact;
+  }
+  const larger = [...project.templates]
+    .filter((template) => template.panels.length >= beatCount)
+    .sort((left, right) => left.panels.length - right.panels.length)[0];
+  return larger ?? null;
+}
+
+function buildStoryboardPanels(
+  project: ComicProject,
+  beats: DirectorBeat[],
+  mode: GenerationMode,
+  characterIds: string[],
+  sceneMemoryId?: string,
+  styleNotes?: string
+): ComicPanel[] {
+  const template = getTemplateForBeatCount(project, beats.length);
+  const frames = template?.panels.slice(0, beats.length) ?? beats.map((_, index) => ({
+    x: 48,
+    y: 48 + index * 188,
+    width: 756,
+    height: 160,
+    rotation: 0
+  }));
+
+  return beats.map((beat, index) => {
+    const frame = frames[index];
+    const nextPanel = buildNewPanel(project, index, beat.mode ?? mode);
+    return {
+      ...nextPanel,
+      title: beat.title,
+      x: frame.x,
+      y: frame.y,
+      width: frame.width,
+      height: frame.height,
+      mode: beat.mode ?? mode,
+      characterIds,
+      sceneMemoryId,
+      prompt: {
+        prompt: beat.description,
+        negativePrompt: nextPanel.prompt.negativePrompt,
+        sceneSummary: beat.description,
+        shotType: beat.shotType,
+        styleNotes: styleNotes ?? "",
+        revisionIntent: nextPanel.prompt.revisionIntent
+      },
+      generation: {
+        ...nextPanel.generation,
+        width: Math.round(frame.width),
+        height: Math.round(frame.height)
+      }
+    };
+  });
+}
+
 export const useEditorStore = create<EditorState>((set, get) => ({
   project: defaultProject,
   selectedPageId: defaultProject.pages[0]?.id ?? "",
@@ -197,12 +316,13 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   lastSavedAt: null,
   hydrateProject: (project) =>
     set((state) => {
+      const normalizedProject = normalizeProject(project);
       const nextPage =
-        project.pages.find((page) => page.id === state.selectedPageId) ?? project.pages[0];
+        normalizedProject.pages.find((page) => page.id === state.selectedPageId) ?? normalizedProject.pages[0];
       const nextPanel =
         nextPage?.panels.find((panel) => panel.id === state.selectedPanelId) ?? nextPage?.panels[0] ?? null;
       return {
-        project,
+        project: normalizedProject,
         selectedPageId: nextPage?.id ?? "",
         selectedPanelId: nextPanel?.id ?? null,
         isDirty: false,
@@ -211,12 +331,13 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     }),
   markProjectSaved: (project) =>
     set((state) => {
+      const normalizedProject = normalizeProject(project);
       const nextPage =
-        project.pages.find((page) => page.id === state.selectedPageId) ?? project.pages[0];
+        normalizedProject.pages.find((page) => page.id === state.selectedPageId) ?? normalizedProject.pages[0];
       const nextPanel =
         nextPage?.panels.find((panel) => panel.id === state.selectedPanelId) ?? nextPage?.panels[0] ?? null;
       return {
-        project,
+        project: normalizedProject,
         selectedPageId: nextPage?.id ?? "",
         selectedPanelId: nextPanel?.id ?? null,
         isDirty: false,
@@ -302,6 +423,24 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     set((state) => ({
       project: updateCurrentPage(state.project, state.selectedPageId, (panels) =>
         panels.map((panel) => (panel.id === panelId ? { ...panel, ...updates } : panel))
+      ),
+      isDirty: true
+    }));
+  },
+  updatePanelInpaintMask: (panelId, updates) => {
+    set((state) => ({
+      project: updateCurrentPage(state.project, state.selectedPageId, (panels) =>
+        panels.map((panel) =>
+          panel.id === panelId
+            ? {
+                ...panel,
+                inpaintMask: {
+                  ...panel.inpaintMask,
+                  ...updates
+                }
+              }
+            : panel
+        )
       ),
       isDirty: true
     }));
@@ -401,6 +540,25 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         },
         selectedPageId: duplicatedPage.id,
         selectedPanelId: duplicatedPage.panels[0]?.id ?? null,
+        promptPreview: null,
+        isDirty: true
+      };
+    });
+  },
+  applyDirectorStoryboard: (payload) => {
+    const { selectedPageId } = get();
+    set((state) => {
+      const nextPanels = buildStoryboardPanels(
+        state.project,
+        payload.beats,
+        payload.mode ?? "bw",
+        payload.characterIds ?? [],
+        payload.sceneMemoryId,
+        payload.styleNotes
+      );
+      return {
+        project: updateCurrentPage(state.project, selectedPageId, () => nextPanels),
+        selectedPanelId: nextPanels[0]?.id ?? null,
         promptPreview: null,
         isDirty: true
       };

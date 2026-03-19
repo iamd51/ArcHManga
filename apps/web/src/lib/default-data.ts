@@ -57,12 +57,18 @@ const mangaWorkflowJson = {
       cfg: 6.2,
       sampler_name: "euler",
       scheduler: "normal",
-      denoise: 1
+      denoise: 1,
+      model: ["10", 0],
+      positive: ["2", 0],
+      negative: ["3", 0],
+      latent_image: ["4", 0]
     }
   },
   "6": { class_type: "VAEDecode", inputs: { samples: ["5", 0], vae: ["1", 2] } },
   "7": { class_type: "SaveImage", inputs: { images: ["6", 0], filename_prefix: "archmanga/manga" } },
-  "8": { class_type: "IPAdapterApply", inputs: { image: "", weight: 0, model: ["1", 0] } }
+  "8": { class_type: "IPAdapterApply", inputs: { image: "", weight: 0, model: ["1", 0] } },
+  "9": { class_type: "IPAdapterApply", inputs: { image: "", weight: 0, model: ["8", 0] } },
+  "10": { class_type: "IPAdapterApply", inputs: { image: "", weight: 0, model: ["9", 0] } }
 };
 
 const colorWorkflowJson = {
@@ -78,7 +84,11 @@ const colorWorkflowJson = {
       cfg: 6.8,
       sampler_name: "dpmpp_2m",
       scheduler: "normal",
-      denoise: 1
+      denoise: 1,
+      model: ["10", 0],
+      positive: ["2", 0],
+      negative: ["3", 0],
+      latent_image: ["4", 0]
     }
   },
   "6": { class_type: "VAEDecode", inputs: { samples: ["5", 0], vae: ["1", 2] } },
@@ -86,7 +96,84 @@ const colorWorkflowJson = {
   "8": {
     class_type: "InstantIDApply",
     inputs: { image: "", weight_faceidv2: 0, model: ["1", 0] }
+  },
+  "9": {
+    class_type: "InstantIDApply",
+    inputs: { image: "", weight_faceidv2: 0, model: ["8", 0] }
+  },
+  "10": {
+    class_type: "InstantIDApply",
+    inputs: { image: "", weight_faceidv2: 0, model: ["9", 0] }
   }
+};
+
+const mangaRegenerationWorkflowJson = {
+  "1": { class_type: "CheckpointLoaderSimple", inputs: { ckpt_name: "sdxl-manga-ink" } },
+  "2": { class_type: "CLIPTextEncode", inputs: { text: "", clip: ["1", 1] } },
+  "3": { class_type: "CLIPTextEncode", inputs: { text: "", clip: ["1", 1] } },
+  "4": { class_type: "LoadImage", inputs: { image: "" } },
+  "5": { class_type: "VAEEncode", inputs: { pixels: ["4", 0], vae: ["1", 2] } },
+  "6": { class_type: "LoadImageMask", inputs: { image: "" } },
+  "7": { class_type: "SetLatentNoiseMask", inputs: { samples: ["5", 0], mask: ["6", 0] } },
+  "8": {
+    class_type: "KSampler",
+    inputs: {
+      seed: 0,
+      steps: 24,
+      cfg: 5.8,
+      sampler_name: "euler",
+      scheduler: "normal",
+      denoise: 0.28,
+      model: ["12", 0],
+      positive: ["2", 0],
+      negative: ["3", 0],
+      latent_image: ["7", 0]
+    }
+  },
+  "9": { class_type: "VAEDecode", inputs: { samples: ["8", 0], vae: ["1", 2] } },
+  "10": { class_type: "IPAdapterApply", inputs: { image: "", weight: 0, model: ["1", 0] } },
+  "11": { class_type: "IPAdapterApply", inputs: { image: "", weight: 0, model: ["10", 0] } },
+  "12": { class_type: "IPAdapterApply", inputs: { image: "", weight: 0, model: ["11", 0] } },
+  "13": { class_type: "SaveImage", inputs: { images: ["9", 0], filename_prefix: "archmanga/manga-regen" } }
+};
+
+const colorRegenerationWorkflowJson = {
+  "1": { class_type: "CheckpointLoaderSimple", inputs: { ckpt_name: "sdxl-anime-pro" } },
+  "2": { class_type: "CLIPTextEncode", inputs: { text: "", clip: ["1", 1] } },
+  "3": { class_type: "CLIPTextEncode", inputs: { text: "", clip: ["1", 1] } },
+  "4": { class_type: "LoadImage", inputs: { image: "" } },
+  "5": { class_type: "VAEEncode", inputs: { pixels: ["4", 0], vae: ["1", 2] } },
+  "6": { class_type: "LoadImageMask", inputs: { image: "" } },
+  "7": { class_type: "SetLatentNoiseMask", inputs: { samples: ["5", 0], mask: ["6", 0] } },
+  "8": {
+    class_type: "KSampler",
+    inputs: {
+      seed: 0,
+      steps: 28,
+      cfg: 6.4,
+      sampler_name: "dpmpp_2m",
+      scheduler: "normal",
+      denoise: 0.34,
+      model: ["12", 0],
+      positive: ["2", 0],
+      negative: ["3", 0],
+      latent_image: ["7", 0]
+    }
+  },
+  "9": { class_type: "VAEDecode", inputs: { samples: ["8", 0], vae: ["1", 2] } },
+  "10": {
+    class_type: "InstantIDApply",
+    inputs: { image: "", weight_faceidv2: 0, model: ["1", 0] }
+  },
+  "11": {
+    class_type: "InstantIDApply",
+    inputs: { image: "", weight_faceidv2: 0, model: ["10", 0] }
+  },
+  "12": {
+    class_type: "InstantIDApply",
+    inputs: { image: "", weight_faceidv2: 0, model: ["11", 0] }
+  },
+  "13": { class_type: "SaveImage", inputs: { images: ["9", 0], filename_prefix: "archmanga/color-regen" } }
 };
 
 export const defaultProject: ComicProject = {
@@ -144,28 +231,65 @@ export const defaultProject: ComicProject = {
         { id: "bind-neg-bw", nodeId: "3", inputName: "text", source: "negative_prompt" },
         { id: "bind-width-bw", nodeId: "4", inputName: "width", source: "width" },
         { id: "bind-height-bw", nodeId: "4", inputName: "height", source: "height" },
+        { id: "bind-denoise-bw", nodeId: "5", inputName: "denoise", source: "denoise" },
         { id: "bind-steps-bw", nodeId: "5", inputName: "steps", source: "steps" },
         { id: "bind-cfg-bw", nodeId: "5", inputName: "cfg", source: "cfg" },
         { id: "bind-sampler-bw", nodeId: "5", inputName: "sampler_name", source: "sampler" },
         { id: "bind-scheduler-bw", nodeId: "5", inputName: "scheduler", source: "scheduler" },
         { id: "bind-seed-bw", nodeId: "5", inputName: "seed", source: "seed" },
         {
-          id: "bind-adapter-image-bw",
+          id: "bind-adapter-face-bw",
           nodeId: "8",
           inputName: "image",
-          source: "reference_image_url",
+          source: "face_reference_image_url",
           provider: "ip-adapter",
           characterIndex: 0,
-          label: "Primary character reference"
+          label: "Face reference"
         },
         {
-          id: "bind-adapter-weight-bw",
+          id: "bind-adapter-face-weight-bw",
           nodeId: "8",
           inputName: "weight",
           source: "adapter_weight",
           provider: "ip-adapter",
           characterIndex: 0,
-          label: "Primary adapter weight"
+          label: "Face adapter weight"
+        },
+        {
+          id: "bind-adapter-body-bw",
+          nodeId: "9",
+          inputName: "image",
+          source: "full_body_reference_image_url",
+          provider: "ip-adapter",
+          characterIndex: 0,
+          label: "Full body reference"
+        },
+        {
+          id: "bind-adapter-body-weight-bw",
+          nodeId: "9",
+          inputName: "weight",
+          source: "adapter_weight",
+          provider: "ip-adapter",
+          characterIndex: 0,
+          label: "Body adapter weight"
+        },
+        {
+          id: "bind-adapter-outfit-bw",
+          nodeId: "10",
+          inputName: "image",
+          source: "outfit_reference_image_url",
+          provider: "ip-adapter",
+          characterIndex: 0,
+          label: "Outfit reference"
+        },
+        {
+          id: "bind-adapter-outfit-weight-bw",
+          nodeId: "10",
+          inputName: "weight",
+          source: "adapter_weight",
+          provider: "ip-adapter",
+          characterIndex: 0,
+          label: "Outfit adapter weight"
         }
       ],
       workflowJson: mangaWorkflowJson
@@ -196,31 +320,246 @@ export const defaultProject: ComicProject = {
         { id: "bind-neg-color", nodeId: "3", inputName: "text", source: "negative_prompt" },
         { id: "bind-width-color", nodeId: "4", inputName: "width", source: "width" },
         { id: "bind-height-color", nodeId: "4", inputName: "height", source: "height" },
+        { id: "bind-denoise-color", nodeId: "5", inputName: "denoise", source: "denoise" },
         { id: "bind-steps-color", nodeId: "5", inputName: "steps", source: "steps" },
         { id: "bind-cfg-color", nodeId: "5", inputName: "cfg", source: "cfg" },
         { id: "bind-sampler-color", nodeId: "5", inputName: "sampler_name", source: "sampler" },
         { id: "bind-scheduler-color", nodeId: "5", inputName: "scheduler", source: "scheduler" },
         { id: "bind-seed-color", nodeId: "5", inputName: "seed", source: "seed" },
         {
-          id: "bind-adapter-image-color",
+          id: "bind-adapter-face-color",
           nodeId: "8",
           inputName: "image",
-          source: "reference_image_url",
+          source: "face_reference_image_url",
           provider: "instantid",
           characterIndex: 0,
-          label: "Primary character reference"
+          label: "Face reference"
         },
         {
-          id: "bind-adapter-weight-color",
+          id: "bind-adapter-face-weight-color",
           nodeId: "8",
           inputName: "weight_faceidv2",
           source: "adapter_weight",
           provider: "instantid",
           characterIndex: 0,
-          label: "Primary adapter weight"
+          label: "Face adapter weight"
+        },
+        {
+          id: "bind-adapter-body-color",
+          nodeId: "9",
+          inputName: "image",
+          source: "full_body_reference_image_url",
+          provider: "instantid",
+          characterIndex: 0,
+          label: "Full body reference"
+        },
+        {
+          id: "bind-adapter-body-weight-color",
+          nodeId: "9",
+          inputName: "weight_faceidv2",
+          source: "adapter_weight",
+          provider: "instantid",
+          characterIndex: 0,
+          label: "Body adapter weight"
+        },
+        {
+          id: "bind-adapter-outfit-color",
+          nodeId: "10",
+          inputName: "image",
+          source: "outfit_reference_image_url",
+          provider: "instantid",
+          characterIndex: 0,
+          label: "Outfit reference"
+        },
+        {
+          id: "bind-adapter-outfit-weight-color",
+          nodeId: "10",
+          inputName: "weight_faceidv2",
+          source: "adapter_weight",
+          provider: "instantid",
+          characterIndex: 0,
+          label: "Outfit adapter weight"
         }
       ],
       workflowJson: colorWorkflowJson
+    },
+    {
+      id: "wf-bw-regen",
+      name: "Manga BW Regeneration",
+      description: "Img2img-style black-and-white regeneration workflow for expression, pose, and local beat revisions.",
+      mode: "bw",
+      modelFamily: "sdxl",
+      promptPrefix: "high-contrast manga redraw, preserve panel readability, retain established staging",
+      controls: ["img2img", "ip-adapter", "inpaint"],
+      templateKey: "sdxl_manga_regen",
+      parameters: [
+        { key: "steps", label: "Steps", type: "number", defaultValue: 24 },
+        { key: "cfg", label: "CFG", type: "number", defaultValue: 5.8 },
+        {
+          key: "sampler",
+          label: "Sampler",
+          type: "select",
+          defaultValue: "euler",
+          options: ["euler", "dpmpp_2m", "dpmpp_sde"]
+        }
+      ],
+      nodeBindings: [
+        { id: "bind-model-bw-regen", nodeId: "1", inputName: "ckpt_name", source: "model" },
+        { id: "bind-pos-bw-regen", nodeId: "2", inputName: "text", source: "positive_prompt" },
+        { id: "bind-neg-bw-regen", nodeId: "3", inputName: "text", source: "negative_prompt" },
+        { id: "bind-source-bw-regen", nodeId: "4", inputName: "image", source: "source_image_url" },
+        { id: "bind-mask-bw-regen", nodeId: "6", inputName: "image", source: "mask_image_url" },
+        { id: "bind-denoise-bw-regen", nodeId: "8", inputName: "denoise", source: "denoise" },
+        { id: "bind-steps-bw-regen", nodeId: "8", inputName: "steps", source: "steps" },
+        { id: "bind-cfg-bw-regen", nodeId: "8", inputName: "cfg", source: "cfg" },
+        { id: "bind-sampler-bw-regen", nodeId: "8", inputName: "sampler_name", source: "sampler" },
+        { id: "bind-scheduler-bw-regen", nodeId: "8", inputName: "scheduler", source: "scheduler" },
+        { id: "bind-seed-bw-regen", nodeId: "8", inputName: "seed", source: "seed" },
+        {
+          id: "bind-adapter-face-bw-regen",
+          nodeId: "10",
+          inputName: "image",
+          source: "face_reference_image_url",
+          provider: "ip-adapter",
+          characterIndex: 0,
+          label: "Face reference"
+        },
+        {
+          id: "bind-adapter-face-weight-bw-regen",
+          nodeId: "10",
+          inputName: "weight",
+          source: "adapter_weight",
+          provider: "ip-adapter",
+          characterIndex: 0,
+          label: "Face adapter weight"
+        },
+        {
+          id: "bind-adapter-body-bw-regen",
+          nodeId: "11",
+          inputName: "image",
+          source: "full_body_reference_image_url",
+          provider: "ip-adapter",
+          characterIndex: 0,
+          label: "Full body reference"
+        },
+        {
+          id: "bind-adapter-body-weight-bw-regen",
+          nodeId: "11",
+          inputName: "weight",
+          source: "adapter_weight",
+          provider: "ip-adapter",
+          characterIndex: 0,
+          label: "Body adapter weight"
+        },
+        {
+          id: "bind-adapter-outfit-bw-regen",
+          nodeId: "12",
+          inputName: "image",
+          source: "outfit_reference_image_url",
+          provider: "ip-adapter",
+          characterIndex: 0,
+          label: "Outfit reference"
+        },
+        {
+          id: "bind-adapter-outfit-weight-bw-regen",
+          nodeId: "12",
+          inputName: "weight",
+          source: "adapter_weight",
+          provider: "ip-adapter",
+          characterIndex: 0,
+          label: "Outfit adapter weight"
+        }
+      ],
+      workflowJson: mangaRegenerationWorkflowJson
+    },
+    {
+      id: "wf-color-regen",
+      name: "Color Story Regeneration",
+      description: "Img2img-style color regeneration workflow for continuity-safe redraws of existing panels.",
+      mode: "color",
+      modelFamily: "sdxl",
+      promptPrefix: "cinematic anime redraw, preserve composition and continuity, refine only the requested change",
+      controls: ["img2img", "instantid", "inpaint"],
+      templateKey: "sdxl_color_regen",
+      parameters: [
+        { key: "steps", label: "Steps", type: "number", defaultValue: 28 },
+        { key: "cfg", label: "CFG", type: "number", defaultValue: 6.4 },
+        {
+          key: "sampler",
+          label: "Sampler",
+          type: "select",
+          defaultValue: "dpmpp_2m",
+          options: ["euler", "dpmpp_2m", "dpmpp_sde"]
+        }
+      ],
+      nodeBindings: [
+        { id: "bind-model-color-regen", nodeId: "1", inputName: "ckpt_name", source: "model" },
+        { id: "bind-pos-color-regen", nodeId: "2", inputName: "text", source: "positive_prompt" },
+        { id: "bind-neg-color-regen", nodeId: "3", inputName: "text", source: "negative_prompt" },
+        { id: "bind-source-color-regen", nodeId: "4", inputName: "image", source: "source_image_url" },
+        { id: "bind-mask-color-regen", nodeId: "6", inputName: "image", source: "mask_image_url" },
+        { id: "bind-denoise-color-regen", nodeId: "8", inputName: "denoise", source: "denoise" },
+        { id: "bind-steps-color-regen", nodeId: "8", inputName: "steps", source: "steps" },
+        { id: "bind-cfg-color-regen", nodeId: "8", inputName: "cfg", source: "cfg" },
+        { id: "bind-sampler-color-regen", nodeId: "8", inputName: "sampler_name", source: "sampler" },
+        { id: "bind-scheduler-color-regen", nodeId: "8", inputName: "scheduler", source: "scheduler" },
+        { id: "bind-seed-color-regen", nodeId: "8", inputName: "seed", source: "seed" },
+        {
+          id: "bind-adapter-face-color-regen",
+          nodeId: "10",
+          inputName: "image",
+          source: "face_reference_image_url",
+          provider: "instantid",
+          characterIndex: 0,
+          label: "Face reference"
+        },
+        {
+          id: "bind-adapter-face-weight-color-regen",
+          nodeId: "10",
+          inputName: "weight_faceidv2",
+          source: "adapter_weight",
+          provider: "instantid",
+          characterIndex: 0,
+          label: "Face adapter weight"
+        },
+        {
+          id: "bind-adapter-body-color-regen",
+          nodeId: "11",
+          inputName: "image",
+          source: "full_body_reference_image_url",
+          provider: "instantid",
+          characterIndex: 0,
+          label: "Full body reference"
+        },
+        {
+          id: "bind-adapter-body-weight-color-regen",
+          nodeId: "11",
+          inputName: "weight_faceidv2",
+          source: "adapter_weight",
+          provider: "instantid",
+          characterIndex: 0,
+          label: "Body adapter weight"
+        },
+        {
+          id: "bind-adapter-outfit-color-regen",
+          nodeId: "12",
+          inputName: "image",
+          source: "outfit_reference_image_url",
+          provider: "instantid",
+          characterIndex: 0,
+          label: "Outfit reference"
+        },
+        {
+          id: "bind-adapter-outfit-weight-color-regen",
+          nodeId: "12",
+          inputName: "weight_faceidv2",
+          source: "adapter_weight",
+          provider: "instantid",
+          characterIndex: 0,
+          label: "Outfit adapter weight"
+        }
+      ],
+      workflowJson: colorRegenerationWorkflowJson
     }
   ],
   characters: [
@@ -248,6 +587,14 @@ export const defaultProject: ComicProject = {
           role: "full-body",
           angle: "full-body",
           notes: "Use for coat silhouette and body proportions."
+        },
+        {
+          id: "ref-rin-outfit",
+          label: "Coat detail",
+          url: "https://example.invalid/rin-outfit.png",
+          role: "outfit",
+          angle: "three-quarter",
+          notes: "Use for coat collar, sleeve shape, and rain-soaked fabric details."
         }
       ],
       consistency: {
@@ -261,7 +608,7 @@ export const defaultProject: ComicProject = {
         provider: "ip-adapter",
         enabled: true,
         weight: 0.72,
-        referenceImageIds: ["ref-rin-front", "ref-rin-full"]
+        referenceImageIds: ["ref-rin-front", "ref-rin-full", "ref-rin-outfit"]
       }
     },
     {
@@ -280,6 +627,14 @@ export const defaultProject: ComicProject = {
           role: "primary",
           angle: "front",
           notes: "Primary glasses and facial proportion reference."
+        },
+        {
+          id: "ref-kai-outfit",
+          label: "Jacket detail",
+          url: "https://example.invalid/kai-outfit.png",
+          role: "outfit",
+          angle: "three-quarter",
+          notes: "Use for jacket structure, sleeve rolls, and messenger bag strap placement."
         }
       ],
       consistency: {
@@ -293,7 +648,7 @@ export const defaultProject: ComicProject = {
         provider: "instantid",
         enabled: true,
         weight: 0.68,
-        referenceImageIds: ["ref-kai-front"]
+        referenceImageIds: ["ref-kai-front", "ref-kai-outfit"]
       }
     }
   ],
@@ -323,6 +678,14 @@ export const defaultProject: ComicProject = {
         workflowPresetId: index < 3 ? "wf-bw-panel" : "wf-color-panel",
         characterIds: index === 0 ? ["char-rin"] : ["char-rin", "char-kai"],
         sceneMemoryId: "scene-rain-alley",
+        inpaintMask: {
+          enabled: false,
+          x: 0.25,
+          y: 0.2,
+          width: 0.5,
+          height: 0.4,
+          feather: 24
+        },
         latestJobStatus: index === 0 ? "complete" : "idle",
         prompt: {
           prompt:
@@ -332,7 +695,14 @@ export const defaultProject: ComicProject = {
           negativePrompt: "muddy anatomy, extra fingers, inconsistent costume details",
           sceneSummary: "Rainy neon alley at night, reflective asphalt, emotional distance",
           shotType: index === 0 ? "close-up" : "medium shot",
-          styleNotes: index < 3 ? "manga screentone, stark blacks" : "wet neon highlights, muted palette"
+          styleNotes: index < 3 ? "manga screentone, stark blacks" : "wet neon highlights, muted palette",
+          revisionIntent: {
+            preserveComposition: false,
+            preserveBackground: false,
+            preserveCharacterIdentity: true,
+            editPriority: "general",
+            changeInstructions: ""
+          }
         },
         generation: {
           width: Math.round(panel.width),

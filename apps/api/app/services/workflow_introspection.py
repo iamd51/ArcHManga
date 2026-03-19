@@ -12,6 +12,10 @@ def detect_controls(workflow_json: dict) -> list[str]:
         controls.append("instantid")
     if "controlnet" in names:
         controls.append("controlnet")
+    if "loadimage" in names or "vaeencode" in names:
+        controls.append("img2img")
+    if "inpaint" in names or "loadimagemask" in names:
+        controls.append("inpaint")
     if "vae" in names:
         controls.append("vae")
     return controls or ["custom-workflow"]
@@ -66,8 +70,27 @@ def guess_bindings(workflow_json: dict) -> list[WorkflowNodeBinding]:
                         source="height",
                     )
                 )
+        if "loadimage" in class_type and "image" in inputs:
+            bindings.append(
+                WorkflowNodeBinding(
+                    id=f"{node_id}-image-source",
+                    node_id=str(node_id),
+                    input_name="image",
+                    source="source_image_url",
+                )
+            )
+        if "loadimagemask" in class_type and "image" in inputs:
+            bindings.append(
+                WorkflowNodeBinding(
+                    id=f"{node_id}-mask-source",
+                    node_id=str(node_id),
+                    input_name="image",
+                    source="mask_image_url",
+                )
+            )
         if "ksampler" in class_type:
             for input_name, source in [
+                ("denoise", "denoise"),
                 ("steps", "steps"),
                 ("cfg", "cfg"),
                 ("sampler_name", "sampler"),
@@ -84,23 +107,45 @@ def guess_bindings(workflow_json: dict) -> list[WorkflowNodeBinding]:
                         )
                     )
         if "ipadapter" in class_type or "ip_adapter" in class_type or "instantid" in class_type:
-            for input_name, source in [
-                ("image", "reference_image_url"),
-                ("weight", "adapter_weight"),
-                ("weight_faceidv2", "adapter_weight"),
-            ]:
-                if input_name in inputs:
-                    provider = "instantid" if "instantid" in class_type else "ip-adapter"
+            provider = "instantid" if "instantid" in class_type else "ip-adapter"
+            for input_name in inputs:
+                if input_name in {"weight", "weight_faceidv2"}:
                     bindings.append(
                         WorkflowNodeBinding(
                             id=f"{node_id}-{input_name}",
                             node_id=str(node_id),
                             input_name=input_name,
-                            source=source,
+                            source="adapter_weight",
                             provider=provider,
                             character_index=0,
                         )
                     )
+                    continue
+                if "image" not in input_name:
+                    continue
+                lowered_input = input_name.lower()
+                if "face" in lowered_input:
+                    source = "face_reference_image_url"
+                elif "body" in lowered_input or "full" in lowered_input:
+                    source = "full_body_reference_image_url"
+                elif "outfit" in lowered_input or "cloth" in lowered_input:
+                    source = "outfit_reference_image_url"
+                elif "expression" in lowered_input or "emotion" in lowered_input:
+                    source = "expression_reference_image_url"
+                elif "primary" in lowered_input:
+                    source = "primary_reference_image_url"
+                else:
+                    source = "reference_image_url"
+                bindings.append(
+                    WorkflowNodeBinding(
+                        id=f"{node_id}-{input_name}",
+                        node_id=str(node_id),
+                        input_name=input_name,
+                        source=source,
+                        provider=provider,
+                        character_index=0,
+                    )
+                )
     return bindings
 
 

@@ -23,7 +23,8 @@ from app.services.workflow_introspection import detect_controls, guess_bindings
 
 class CatalogService:
     def __init__(self) -> None:
-        self.project = get_mock_project()
+        self.default_project = get_mock_project()
+        self.project = deepcopy(self.default_project)
         self.storage_dir = Path("storage")
         self.workflow_dir = self.storage_dir / "workflows"
         self.reference_dir = self.storage_dir / "character-references"
@@ -37,6 +38,7 @@ class CatalogService:
             self._load_saved_characters()
             self._load_saved_scene_memories()
             self._load_saved_workflows()
+        self._ensure_default_catalog_items()
 
     def get_project(self, project_id: str | None = None) -> ComicProject:
         if project_id and self.project.id != project_id:
@@ -48,6 +50,7 @@ class CatalogService:
             raise ValueError("Project id mismatch.")
 
         self.project = ComicProject.model_validate(project.model_dump(by_alias=True))
+        self._ensure_default_catalog_items()
         self._save_project_snapshot()
         self._save_workflow_snapshots()
         self._save_characters()
@@ -329,6 +332,29 @@ class CatalogService:
                 self.project.scene_memories.append(saved)
             else:
                 self.project.scene_memories[existing_index] = saved
+
+    def _ensure_default_catalog_items(self) -> None:
+        self._merge_missing_workflows()
+        self._merge_missing_templates()
+        self._merge_missing_models()
+
+    def _merge_missing_workflows(self) -> None:
+        existing_ids = {workflow.id for workflow in self.project.workflows}
+        for workflow in self.default_project.workflows:
+            if workflow.id not in existing_ids:
+                self.project.workflows.append(deepcopy(workflow))
+
+    def _merge_missing_templates(self) -> None:
+        existing_ids = {template.id for template in self.project.templates}
+        for template in self.default_project.templates:
+            if template.id not in existing_ids:
+                self.project.templates.append(deepcopy(template))
+
+    def _merge_missing_models(self) -> None:
+        existing_ids = {model.id for model in self.project.models}
+        for model in self.default_project.models:
+            if model.id not in existing_ids:
+                self.project.models.append(deepcopy(model))
 
 
 catalog_service = CatalogService()

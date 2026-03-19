@@ -7,6 +7,11 @@ import { Group, Image as KonvaImage, Layer, Rect, Stage, Text, Transformer } fro
 import { useCurrentPage, useEditorStore } from "@/store/editor-store";
 
 const PAGE_PADDING = 24;
+const PANEL_INSET = 14;
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
 
 function usePanelImage(src?: string) {
   const [image, setImage] = useState<HTMLImageElement | null>(null);
@@ -39,7 +44,9 @@ function PanelNode({
   renderMode,
   onSelect,
   onDragEnd,
-  panelRef
+  panelRef,
+  maskRef,
+  onMaskChange
 }: {
   panel: ReturnType<typeof useCurrentPage>["panels"][number];
   index: number;
@@ -48,16 +55,22 @@ function PanelNode({
   onSelect: () => void;
   onDragEnd: (event: KonvaEventObject<DragEvent>) => void;
   panelRef: (node: any) => void;
+  maskRef: (node: any) => void;
+  onMaskChange: (updates: Partial<typeof panel.inpaintMask>) => void;
 }) {
   const panelImage = usePanelImage(panel.imageUrl);
-  const innerWidth = Math.max(panel.width - 28, 40);
-  const innerHeight = Math.max(panel.height - 28, 40);
+  const innerWidth = Math.max(panel.width - PANEL_INSET * 2, 40);
+  const innerHeight = Math.max(panel.height - PANEL_INSET * 2, 40);
   const showImage = Boolean(panelImage);
   const imageRatio = panelImage ? Math.max(innerWidth / panelImage.width, innerHeight / panelImage.height) : 1;
   const imageWidth = panelImage ? panelImage.width * imageRatio : innerWidth;
   const imageHeight = panelImage ? panelImage.height * imageRatio : innerHeight;
-  const imageX = 14 + (innerWidth - imageWidth) / 2;
-  const imageY = 14 + (innerHeight - imageHeight) / 2;
+  const imageX = PANEL_INSET + (innerWidth - imageWidth) / 2;
+  const imageY = PANEL_INSET + (innerHeight - imageHeight) / 2;
+  const maskX = PANEL_INSET + innerWidth * panel.inpaintMask.x;
+  const maskY = PANEL_INSET + innerHeight * panel.inpaintMask.y;
+  const maskWidth = innerWidth * panel.inpaintMask.width;
+  const maskHeight = innerHeight * panel.inpaintMask.height;
 
   return (
     <Group
@@ -81,7 +94,12 @@ function PanelNode({
         cornerRadius={renderMode === "export" ? 6 : 16}
       />
       {showImage ? (
-        <Group clipX={14} clipY={14} clipWidth={innerWidth} clipHeight={innerHeight}>
+        <Group
+          clipX={PANEL_INSET}
+          clipY={PANEL_INSET}
+          clipWidth={innerWidth}
+          clipHeight={innerHeight}
+        >
           <KonvaImage
             image={panelImage ?? undefined}
             x={imageX}
@@ -89,13 +107,83 @@ function PanelNode({
             width={imageWidth}
             height={imageHeight}
           />
+          {renderMode === "editor" && panel.inpaintMask.enabled ? (
+            <>
+              <Rect x={PANEL_INSET} y={PANEL_INSET} width={innerWidth} height={innerHeight} fill="rgba(18, 16, 15, 0.48)" />
+              <Rect
+                x={maskX}
+                y={maskY}
+                width={maskWidth}
+                height={maskHeight}
+                fill="rgba(255, 246, 232, 0.12)"
+                stroke="#ffd36b"
+                strokeWidth={2}
+                cornerRadius={Math.max(8, panel.inpaintMask.feather / 3)}
+                shadowColor="rgba(255, 211, 107, 0.45)"
+                shadowBlur={panel.inpaintMask.feather}
+              />
+            </>
+          ) : null}
         </Group>
+      ) : null}
+      {renderMode === "editor" && panel.inpaintMask.enabled ? (
+        <Rect
+          x={maskX}
+          y={maskY}
+          width={maskWidth}
+          height={maskHeight}
+          fill="rgba(255, 244, 206, 0.16)"
+          stroke="#ffd36b"
+          dash={[8, 6]}
+          strokeWidth={selected ? 2.5 : 2}
+          cornerRadius={Math.max(8, panel.inpaintMask.feather / 3)}
+          draggable
+          ref={maskRef}
+          onMouseDown={(event) => {
+            event.cancelBubble = true;
+            onSelect();
+          }}
+          onTap={(event) => {
+            event.cancelBubble = true;
+            onSelect();
+          }}
+          dragBoundFunc={(position) => ({
+            x: clamp(position.x, PANEL_INSET, PANEL_INSET + innerWidth - maskWidth),
+            y: clamp(position.y, PANEL_INSET, PANEL_INSET + innerHeight - maskHeight)
+          })}
+          onDragEnd={(event) => {
+            event.cancelBubble = true;
+            onMaskChange({
+              x: clamp((event.target.x() - PANEL_INSET) / innerWidth, 0, 0.95),
+              y: clamp((event.target.y() - PANEL_INSET) / innerHeight, 0, 0.95)
+            });
+          }}
+          onTransformEnd={(event) => {
+            const node = event.target;
+            const scaleX = node.scaleX();
+            const scaleY = node.scaleY();
+            const nextX = clamp((node.x() - PANEL_INSET) / innerWidth, 0, 0.95);
+            const nextY = clamp((node.y() - PANEL_INSET) / innerHeight, 0, 0.95);
+            const nextWidth = clamp((node.width() * scaleX) / innerWidth, 0.05, 1);
+            const nextHeight = clamp((node.height() * scaleY) / innerHeight, 0.05, 1);
+
+            onMaskChange({
+              x: nextX,
+              y: nextY,
+              width: nextWidth,
+              height: nextHeight
+            });
+
+            node.scaleX(1);
+            node.scaleY(1);
+          }}
+        />
       ) : null}
       {renderMode === "editor" ? (
         <>
           <Rect
-            x={14}
-            y={14}
+            x={PANEL_INSET}
+            y={PANEL_INSET}
             width={innerWidth}
             height={innerHeight}
             dash={[10, 8]}
@@ -148,7 +236,7 @@ function PanelNode({
               x={18}
               y={94}
               width={panel.width - 36}
-              text="Render ready"
+              text={panel.inpaintMask.enabled ? "Render ready · inpaint mask active" : "Render ready"}
               fontSize={16}
               fill="#8f6535"
               fontStyle="bold"
@@ -171,10 +259,14 @@ export function PageCanvas({
   const selectedPanelId = useEditorStore((state) => state.selectedPanelId);
   const selectPanel = useEditorStore((state) => state.selectPanel);
   const updatePanelFrame = useEditorStore((state) => state.updatePanelFrame);
+  const updatePanelInpaintMask = useEditorStore((state) => state.updatePanelInpaintMask);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const rectRefs = useRef<Record<string, any>>({});
+  const maskRefs = useRef<Record<string, any>>({});
   const transformerRef = useRef<any>(null);
+  const maskTransformerRef = useRef<any>(null);
   const [containerWidth, setContainerWidth] = useState(980);
+  const selectedPanel = page.panels.find((panel) => panel.id === selectedPanelId) ?? null;
 
   useEffect(() => {
     if (!containerRef.current) {
@@ -200,6 +292,24 @@ export function PageCanvas({
       transformerRef.current.getLayer()?.batchDraw();
     }
   }, [renderMode, selectedPanelId, page.panels]);
+
+  useEffect(() => {
+    if (!maskTransformerRef.current) {
+      return;
+    }
+
+    if (!selectedPanelId || !selectedPanel?.inpaintMask.enabled) {
+      maskTransformerRef.current.nodes([]);
+      maskTransformerRef.current.getLayer()?.batchDraw();
+      return;
+    }
+
+    const node = maskRefs.current[selectedPanelId];
+    if (node) {
+      maskTransformerRef.current.nodes([node]);
+      maskTransformerRef.current.getLayer()?.batchDraw();
+    }
+  }, [renderMode, selectedPanel, selectedPanelId]);
 
   const stageScale = Math.min((containerWidth - PAGE_PADDING * 2) / page.width, 1);
   const stageWidth = page.width * stageScale;
@@ -252,9 +362,15 @@ export function PageCanvas({
                     y: Math.max(24, event.target.y())
                   });
                 }}
+                onMaskChange={(updates) => updatePanelInpaintMask(panel.id, updates)}
                 panelRef={(node) => {
                   if (node) {
                     rectRefs.current[panel.id] = node;
+                  }
+                }}
+                maskRef={(node) => {
+                  if (node) {
+                    maskRefs.current[panel.id] = node;
                   }
                 }}
               />
@@ -293,6 +409,22 @@ export function PageCanvas({
                 selectedNode.scaleX(1);
                 selectedNode.scaleY(1);
               }}
+            />
+          ) : null}
+          {renderMode === "editor" ? (
+            <Transformer
+              ref={maskTransformerRef}
+              rotateEnabled={false}
+              borderStroke="#ffd36b"
+              anchorFill="#fff8df"
+              anchorStroke="#d9a11e"
+              anchorSize={9}
+              enabledAnchors={["top-left", "top-right", "bottom-left", "bottom-right"]}
+              boundBoxFunc={(_, newBox) => ({
+                ...newBox,
+                width: Math.max(48, newBox.width),
+                height: Math.max(48, newBox.height)
+              })}
             />
           ) : null}
         </Layer>

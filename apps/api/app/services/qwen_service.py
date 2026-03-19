@@ -3,12 +3,19 @@ import json
 import httpx
 
 from app.core.config import get_settings
+from app.schemas.comic import RevisionIntent
 from app.schemas.generation import (
     ContinuityDraftRequest,
     ContinuityDraftResponse,
+    DirectorBeat,
+    DirectorDraftRequest,
+    DirectorDraftResponse,
+    DirectorPanelSuggestion,
+    DirectorSceneSuggestion,
     PromptPreviewRequest,
     PromptPreviewResponse,
 )
+from app.services.character_consistency import build_panel_consistency_plan
 
 
 class QwenPromptService:
@@ -18,6 +25,7 @@ class QwenPromptService:
     async def build_prompt_preview(
         self, payload: PromptPreviewRequest
     ) -> PromptPreviewResponse:
+        consistency_plan = build_panel_consistency_plan(payload.panel, payload.characters)
         fallback = self._fallback_preview(payload)
         if not self.settings.qwen_api_key:
             return fallback
@@ -31,6 +39,8 @@ class QwenPromptService:
             "scene_summary": payload.panel.prompt.scene_summary,
             "shot_type": payload.panel.prompt.shot_type,
             "style_notes": payload.panel.prompt.style_notes,
+            "revision_intent": payload.panel.prompt.revision_intent.model_dump(by_alias=True),
+            "inpaint_mask": payload.panel.inpaint_mask.model_dump(by_alias=True),
             "workflow_prefix": payload.workflow.prompt_prefix if payload.workflow else "",
             "characters": [
                 {
@@ -43,6 +53,7 @@ class QwenPromptService:
                 }
                 for character in payload.characters
             ],
+            "consistency_plan": consistency_plan.model_dump(by_alias=True),
         }
 
         headers = {
@@ -74,6 +85,7 @@ class QwenPromptService:
                     optimized_prompt=parsed["optimized_prompt"],
                     continuity_hints=parsed.get("continuity_hints", []),
                     scene_state=parsed.get("scene_state", payload.panel.prompt.scene_summary),
+                    consistency_plan=consistency_plan,
                 )
         except Exception:
             return fallback
@@ -149,10 +161,11 @@ class QwenPromptService:
             return fallback
 
     def _fallback_preview(self, payload: PromptPreviewRequest) -> PromptPreviewResponse:
+        consistency_plan = build_panel_consistency_plan(payload.panel, payload.characters)
         workflow_prefix = payload.workflow.prompt_prefix if payload.workflow else ""
         character_line = " | ".join(
-            f"{character.name}: {character.appearance}; {character.wardrobe}; anchors={', '.join(character.consistency.anchor_features)}"
-            for character in payload.characters
+            f"{plan.character_name}: {plan.anchor_summary}; wardrobe={plan.wardrobe_lock}"
+            for plan in consistency_plan.character_plans
         )
         continuity_hints = [
             payload.panel.prompt.scene_summary or "Carry over the current scene and emotional tone.",
@@ -162,15 +175,15 @@ class QwenPromptService:
             f"Style anchor: {payload.panel.prompt.style_notes}"
             if payload.panel.prompt.style_notes
             else "Preserve workflow style anchors.",
-            (
-                "Avoid identity drift: "
-                + "; ".join(
-                    f"{character.name} -> {', '.join(character.consistency.forbidden_drift)}"
-                    for character in payload.characters
-                )
-            )
-            if payload.characters
-            else "Keep identity anchors stable across the scene.",
+            *self._revision_intent_hints(payload.panel.prompt.revision_intent),
+            "Confine the redraw to the active inpaint mask." if payload.panel.inpaint_mask.enabled else "",
+            consistency_plan.summary,
+            *consistency_plan.global_hints,
+            *[
+                hint
+                for plan in consistency_plan.character_plans
+                for hint in [*plan.prompt_hints[:2], *plan.warnings[:1]]
+            ],
         ]
         optimized_prompt = ", ".join(
             part
@@ -178,6 +191,19 @@ class QwenPromptService:
                 workflow_prefix,
                 payload.panel.prompt.prompt,
                 f"Character anchors: {character_line}" if character_line else "",
+                (
+                    "Consistency locks: "
+                    + " | ".join(
+                        hint
+                        for hint in (
+                            consistency_plan.global_hints
+                            + [plan.anchor_summary for plan in consistency_plan.character_plans]
+                        )
+                        if hint
+                    )
+                )
+                if consistency_plan.character_plans
+                else "",
                 "Maintain silhouette clarity and preserve identity traits.",
             ]
             if part
@@ -188,6 +214,7 @@ class QwenPromptService:
             optimized_prompt=optimized_prompt,
             continuity_hints=continuity_hints,
             scene_state=payload.panel.prompt.scene_summary or "No scene summary yet.",
+            consistency_plan=consistency_plan,
         )
 
     def _fallback_continuity_draft(
@@ -248,6 +275,375 @@ class QwenPromptService:
             style_notes=style_notes or "Match the previous panel style anchors.",
             continuity_hints=continuity_hints,
         )
+
+    async def build_director_draft(
+        self, payload: DirectorDraftRequest
+    ) -> DirectorDraftResponse:
+        fallback = self._fallback_director_draft(payload)
+        if not self.settings.qwen_api_key:
+            return fallback
+
+        system_prompt = (
+            "You are an AI manga director. Return compact JSON with keys: "
+            "assistant_message, continuity_hints, suggested_panel_count, selected_character_ids, "
+            "suggested_beats, panel_suggestion, scene_suggestion. "
+            "Each beat should contain id, title, description, shot_type, mode, focus_character_ids. "
+            "panel_suggestion should contain prompt, scene_summary, shot_type, style_notes, mode, character_ids, revision_intent. "
+            "scene_suggestion should contain location, time_of_day, weather, lighting, mood, continuity_notes."
+        )
+        user_payload = {
+            "user_message": payload.user_message,
+            "history": [message.model_dump(by_alias=True) for message in payload.history[-8:]],
+            "context_summary": payload.context_summary,
+            "selected_panel": payload.selected_panel.model_dump(by_alias=True) if payload.selected_panel else None,
+            "current_page": payload.current_page.model_dump(by_alias=True),
+            "current_scene_memory": payload.current_scene_memory.model_dump(by_alias=True)
+            if payload.current_scene_memory
+            else None,
+            "previous_panel": payload.previous_panel.model_dump(by_alias=True) if payload.previous_panel else None,
+            "previous_scene_memory": payload.previous_scene_memory.model_dump(by_alias=True)
+            if payload.previous_scene_memory
+            else None,
+            "selected_characters": [
+                {
+                    "id": character.id,
+                    "name": character.name,
+                    "appearance": character.appearance,
+                    "wardrobe": character.wardrobe,
+                    "anchor_features": character.consistency.anchor_features,
+                    "forbidden_drift": character.consistency.forbidden_drift,
+                    "reference_notes": character.reference_notes,
+                }
+                for character in payload.selected_characters
+            ],
+            "available_characters": [
+                {
+                    "id": character.id,
+                    "name": character.name,
+                    "appearance": character.appearance,
+                    "wardrobe": character.wardrobe,
+                }
+                for character in payload.available_characters
+            ],
+        }
+
+        headers = {
+            "Authorization": f"Bearer {self.settings.qwen_api_key}",
+            "Content-Type": "application/json",
+        }
+        body = {
+            "model": self.settings.qwen_model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": json.dumps(user_payload, ensure_ascii=False)},
+            ],
+            "temperature": 0.6,
+        }
+
+        try:
+            async with httpx.AsyncClient(timeout=25.0) as client:
+                response = await client.post(
+                    f"{self.settings.qwen_api_base_url}/chat/completions",
+                    headers=headers,
+                    json=body,
+                )
+                response.raise_for_status()
+                data = response.json()
+                message = data["choices"][0]["message"]["content"]
+                parsed = json.loads(message)
+                return DirectorDraftResponse.model_validate(parsed)
+        except Exception:
+            return fallback
+
+    def _fallback_director_draft(
+        self, payload: DirectorDraftRequest
+    ) -> DirectorDraftResponse:
+        requested_count = self._detect_panel_count(payload.user_message)
+        selected_character_ids = self._detect_character_ids(payload)
+        mode = self._detect_mode(payload)
+        shot_type = self._detect_shot_type(payload.user_message, payload.selected_panel.prompt.shot_type if payload.selected_panel else "")
+        style_notes = self._detect_style_notes(payload)
+        scene_suggestion = self._build_scene_suggestion(payload)
+        panel_count = requested_count or (4 if self._looks_like_storyboard_request(payload.user_message) else 1)
+        panel_count = max(1, min(panel_count, 8))
+
+        suggested_beats = self._build_beats(payload, panel_count, mode, selected_character_ids)
+        panel_suggestion = self._build_panel_suggestion(
+            payload, mode, shot_type, style_notes, selected_character_ids
+        )
+
+        assistant_lines = [
+            f"I suggest {panel_count} panel{'s' if panel_count > 1 else ''} for this beat."
+            if panel_count > 1
+            else "I refined the selected panel into one cleaner dramatic beat.",
+            f"Primary shot: {panel_suggestion.shot_type or shot_type or 'medium shot'}.",
+            f"Characters in focus: {', '.join(selected_character_ids) if selected_character_ids else 'keep current cast'}.",
+        ]
+        if payload.context_summary:
+            assistant_lines.append(f"Working memory: {payload.context_summary}")
+        if scene_suggestion.continuity_notes:
+            assistant_lines.append(scene_suggestion.continuity_notes)
+
+        continuity_hints = [
+            panel_suggestion.scene_summary or "Carry the current scene state forward.",
+            "Preserve identity anchors and wardrobe continuity.",
+            "Advance only one readable emotional or narrative beat per panel.",
+        ]
+        if shot_type:
+            continuity_hints.append(f"Use {shot_type} to keep the page staging readable.")
+        if payload.context_summary:
+            continuity_hints.append(payload.context_summary)
+        if panel_suggestion.revision_intent:
+            continuity_hints.extend(self._revision_intent_hints(panel_suggestion.revision_intent))
+
+        return DirectorDraftResponse(
+            assistant_message=" ".join(assistant_lines),
+            continuity_hints=continuity_hints,
+            suggested_panel_count=panel_count,
+            selected_character_ids=selected_character_ids,
+            suggested_beats=suggested_beats,
+            panel_suggestion=panel_suggestion,
+            scene_suggestion=scene_suggestion,
+        )
+
+    def _detect_panel_count(self, user_message: str) -> int | None:
+        lowered = user_message.lower()
+        special_cases = {
+            "四格": 4,
+            "4格": 4,
+            "three panels": 3,
+            "two panels": 2,
+        }
+        for key, value in special_cases.items():
+            if key in lowered:
+                return value
+
+        digits = []
+        current = ""
+        for character in user_message:
+            if character.isdigit():
+                current += character
+            else:
+                if current:
+                    digits.append(current)
+                    current = ""
+        if current:
+            digits.append(current)
+        for digit in digits:
+            token = int(digit)
+            if any(marker in user_message for marker in [f"{digit}格", f"{digit} panel", f"{digit} panels"]):
+                return token
+        return None
+
+    def _detect_character_ids(self, payload: DirectorDraftRequest) -> list[str]:
+        selected: list[str] = []
+        lowered = payload.user_message.lower()
+        for character in payload.available_characters or payload.selected_characters:
+            if character.name.lower() in lowered:
+                selected.append(character.id)
+        if selected:
+            return selected
+        if payload.selected_characters:
+            return [character.id for character in payload.selected_characters]
+        return []
+
+    def _detect_mode(self, payload: DirectorDraftRequest) -> str:
+        lowered = payload.user_message.lower()
+        if "黑白" in payload.user_message or "bw" in lowered or "manga" in lowered:
+            return "bw"
+        if "彩色" in payload.user_message or "color" in lowered or "colour" in lowered:
+            return "color"
+        if payload.selected_panel:
+            return payload.selected_panel.mode
+        return "bw"
+
+    def _detect_shot_type(self, user_message: str, fallback: str = "") -> str:
+        shot_map = {
+            "close-up": ["特寫", "close-up", "close up", "近景特寫"],
+            "close shot": ["近景", "close shot"],
+            "medium shot": ["中景", "medium shot"],
+            "wide shot": ["遠景", "wide shot", "全景"],
+            "over-shoulder": ["肩後", "over shoulder", "over-the-shoulder"],
+            "reaction shot": ["反應", "reaction shot"],
+        }
+        lowered = user_message.lower()
+        for shot_type, tokens in shot_map.items():
+            if any(token in user_message or token in lowered for token in tokens):
+                return shot_type
+        return fallback or "medium shot"
+
+    def _detect_style_notes(self, payload: DirectorDraftRequest) -> str:
+        notes = []
+        message = payload.user_message
+        if "壓抑" in message or "tense" in message.lower():
+            notes.append("tense restrained mood")
+        if "雨" in message or "rain" in message.lower():
+            notes.append("wet reflective surfaces")
+        if "安靜" in message or "quiet" in message.lower():
+            notes.append("quiet dramatic pacing")
+        if payload.selected_panel and payload.selected_panel.prompt.style_notes:
+            notes.append(payload.selected_panel.prompt.style_notes)
+        return ", ".join(dict.fromkeys(note for note in notes if note))
+
+    def _looks_like_storyboard_request(self, user_message: str) -> bool:
+        markers = ["分鏡", "拆", "storyboard", "beats", "幾格", "排成", "page"]
+        lowered = user_message.lower()
+        return any(marker in user_message or marker in lowered for marker in markers)
+
+    def _build_scene_suggestion(self, payload: DirectorDraftRequest) -> DirectorSceneSuggestion:
+        base = payload.current_scene_memory
+        location = base.location if base else ""
+        time_of_day = base.time_of_day if base else ""
+        weather = base.weather if base else ""
+        lighting = base.lighting if base else ""
+        mood = base.mood if base else ""
+        continuity_notes = base.continuity_notes if base else ""
+        message = payload.user_message
+        lowered = message.lower()
+        if "室內" in message or "inside" in lowered:
+            location = location or "Interior scene"
+        if "便利商店" in message or "store" in lowered:
+            location = "Convenience store interior or storefront"
+        if "夜" in message or "night" in lowered:
+            time_of_day = "late night"
+        if "雨" in message or "rain" in lowered:
+            weather = "steady rain"
+            lighting = lighting or "wet reflections with shaped highlights"
+        if "壓抑" in message or "tense" in lowered:
+            mood = "tense and restrained"
+        if not continuity_notes:
+            continuity_notes = "Carry forward wardrobe, camera direction, and emotional continuity."
+        return DirectorSceneSuggestion(
+            location=location,
+            time_of_day=time_of_day,
+            weather=weather,
+            lighting=lighting,
+            mood=mood,
+            continuity_notes=continuity_notes,
+        )
+
+    def _build_panel_suggestion(
+        self,
+        payload: DirectorDraftRequest,
+        mode: str,
+        shot_type: str,
+        style_notes: str,
+        selected_character_ids: list[str],
+    ) -> DirectorPanelSuggestion:
+        base_prompt = payload.selected_panel.prompt.prompt if payload.selected_panel else ""
+        revision_intent = self._detect_revision_intent(payload)
+        scene_summary = (
+            payload.current_scene_memory.continuity_notes
+            if payload.current_scene_memory
+            else payload.selected_panel.prompt.scene_summary if payload.selected_panel else ""
+        )
+        prompt_parts = [
+            payload.user_message.strip(),
+            f"Focus on {', '.join(selected_character_ids)}" if selected_character_ids else "",
+            "Advance the story by one clear manga beat.",
+        ]
+        if payload.context_summary:
+            prompt_parts.append(f"Director memory: {payload.context_summary}")
+        if base_prompt:
+            prompt_parts.append(f"Preserve useful anchors from: {base_prompt}")
+        prompt_parts.extend(self._revision_intent_hints(revision_intent))
+        return DirectorPanelSuggestion(
+            prompt=", ".join(part for part in prompt_parts if part),
+            scene_summary=scene_summary or "Continue the same scene with controlled continuity.",
+            shot_type=shot_type,
+            style_notes=style_notes or "clean visual storytelling, readable silhouettes",
+            mode=mode,
+            character_ids=selected_character_ids,
+            revision_intent=revision_intent,
+        )
+
+    def _build_beats(
+        self,
+        payload: DirectorDraftRequest,
+        panel_count: int,
+        mode: str,
+        selected_character_ids: list[str],
+    ) -> list[DirectorBeat]:
+        phase_labels = [
+            ("beat-setup", "Setup", "Establish the scene and emotional baseline."),
+            ("beat-move", "Advance", "Move the action or staging forward by one beat."),
+            ("beat-reaction", "Reaction", "Show the emotional response or reveal."),
+            ("beat-payoff", "Payoff", "Land the final dramatic beat or transition."),
+        ]
+        beats: list[DirectorBeat] = []
+        for index in range(panel_count):
+            phase = phase_labels[min(index, len(phase_labels) - 1)]
+            beats.append(
+                DirectorBeat(
+                    id=f"beat-{index + 1}",
+                    title=f"{index + 1}. {phase[1]}",
+                    description=f"{phase[2]} Direction: {payload.user_message}",
+                    shot_type=self._suggest_beat_shot(index, panel_count),
+                    mode=mode,
+                    focus_character_ids=selected_character_ids,
+                )
+            )
+        return beats
+
+    def _detect_revision_intent(self, payload: DirectorDraftRequest) -> RevisionIntent:
+        base = payload.selected_panel.prompt.revision_intent if payload.selected_panel else RevisionIntent()
+        lowered = payload.user_message.lower()
+        preserve_composition = base.preserve_composition or any(
+            token in payload.user_message or token in lowered
+            for token in ["保留構圖", "保持構圖", "同構圖", "keep composition", "same composition"]
+        )
+        preserve_background = base.preserve_background or any(
+            token in payload.user_message or token in lowered
+            for token in ["背景不變", "保持背景", "same background", "keep background"]
+        )
+        preserve_character_identity = base.preserve_character_identity or any(
+            token in payload.user_message or token in lowered
+            for token in ["角色一致", "保留角色", "保留臉", "keep identity", "same character"]
+        )
+        edit_priority = base.edit_priority
+        priority_map = {
+            "expression": ["表情", "expression", "眼神"],
+            "pose": ["姿勢", "pose", "動作"],
+            "camera": ["鏡頭", "構圖", "camera", "shot", "拉遠", "拉近"],
+            "lighting": ["光線", "lighting", "光影"],
+        }
+        for candidate, tokens in priority_map.items():
+            if any(token in payload.user_message or token in lowered for token in tokens):
+                edit_priority = candidate
+                break
+        change_instructions = payload.user_message.strip() or base.change_instructions
+        return RevisionIntent(
+            preserve_composition=preserve_composition,
+            preserve_background=preserve_background,
+            preserve_character_identity=preserve_character_identity,
+            edit_priority=edit_priority or "general",
+            change_instructions=change_instructions,
+        )
+
+    def _revision_intent_hints(self, revision_intent: RevisionIntent) -> list[str]:
+        hints: list[str] = []
+        if revision_intent.preserve_composition:
+            hints.append("Keep composition, panel staging, and camera direction stable.")
+        if revision_intent.preserve_background:
+            hints.append("Preserve the existing background and environmental layout.")
+        if revision_intent.preserve_character_identity:
+            hints.append("Do not drift the active character face, silhouette, or outfit.")
+        if revision_intent.edit_priority != "general":
+            hints.append(f"Revision focus: {revision_intent.edit_priority}.")
+        if revision_intent.change_instructions:
+            hints.append(f"Requested change: {revision_intent.change_instructions}")
+        return hints
+
+    def _suggest_beat_shot(self, index: int, panel_count: int) -> str:
+        if panel_count == 1:
+            return "medium shot"
+        if index == 0:
+            return "wide shot"
+        if index == panel_count - 1:
+            return "close-up"
+        if index == panel_count - 2:
+            return "reaction shot"
+        return "medium shot"
 
 
 qwen_prompt_service = QwenPromptService()

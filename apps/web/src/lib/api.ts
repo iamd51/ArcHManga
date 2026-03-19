@@ -2,6 +2,8 @@ import type {
   CharacterProfile,
   ComicProject,
   ComicPanel,
+  DirectorChatMessage,
+  DirectorDraftResult,
   GenerationJobState,
   PromptPreview,
   WorkflowValidationResult,
@@ -90,7 +92,12 @@ export function importWorkflowPreset(payload: {
   description: string;
   mode: "bw" | "color";
   promptPrefix: string;
-  templateKey: "sdxl_text2img" | "sdxl_manga" | "sdxl_color_story";
+  templateKey:
+    | "sdxl_text2img"
+    | "sdxl_manga"
+    | "sdxl_color_story"
+    | "sdxl_manga_regen"
+    | "sdxl_color_regen";
   workflowJson: Record<string, unknown>;
 }) {
   return request<WorkflowPreset>("/workflows/import", {
@@ -222,6 +229,25 @@ export function createContinuityDraft(payload: {
     styleNotes: string;
     continuityHints: string[];
   }>("/generation/continuity-draft", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export function createDirectorDraft(payload: {
+  userMessage: string;
+  history: DirectorChatMessage[];
+  contextSummary?: string;
+  project: ComicProject;
+  currentPage: ComicProject["pages"][number];
+  selectedPanel?: ComicPanel;
+  currentSceneMemory?: ComicProject["sceneMemories"][number];
+  previousPanel?: ComicPanel;
+  previousSceneMemory?: ComicProject["sceneMemories"][number];
+  selectedCharacters: CharacterProfile[];
+  availableCharacters: CharacterProfile[];
+}) {
+  return request<DirectorDraftResult>("/generation/director-draft", {
     method: "POST",
     body: JSON.stringify(payload)
   });

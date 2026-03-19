@@ -1,14 +1,39 @@
 import type { CharacterProfile, ComicPanel, WorkflowPreset } from "@archmanga/shared";
+import { buildPanelConsistencyPlan } from "@/lib/character-consistency";
+
+function buildRevisionHints(panel: ComicPanel) {
+  const hints: string[] = [];
+  if (panel.prompt.revisionIntent.preserveComposition) {
+    hints.push("Preserve the current composition and staging.");
+  }
+  if (panel.prompt.revisionIntent.preserveBackground) {
+    hints.push("Keep the background layout and environment stable.");
+  }
+  if (panel.prompt.revisionIntent.preserveCharacterIdentity) {
+    hints.push("Hold facial identity, wardrobe, and silhouette consistency.");
+  }
+  if (panel.prompt.revisionIntent.editPriority !== "general") {
+    hints.push(`Primary revision target: ${panel.prompt.revisionIntent.editPriority}.`);
+  }
+  if (panel.prompt.revisionIntent.changeInstructions) {
+    hints.push(`Revision note: ${panel.prompt.revisionIntent.changeInstructions}`);
+  }
+  if (panel.inpaintMask.enabled) {
+    hints.push("Use the active inpaint mask to limit the redraw area.");
+  }
+  return hints;
+}
 
 export function buildPromptPreview(
   panel: ComicPanel,
   workflow: WorkflowPreset | undefined,
   characters: CharacterProfile[]
 ) {
-  const characterLine = characters
+  const consistencyPlan = buildPanelConsistencyPlan(panel, characters);
+  const characterLine = consistencyPlan.characterPlans
     .map(
-      (character) =>
-        `${character.name}: ${character.appearance}; ${character.wardrobe}; anchors=${character.consistency.anchorFeatures.join("/")}`
+      (plan) =>
+        `${plan.characterName}: ${plan.anchorSummary}; wardrobe=${plan.wardrobeLock}; refs=${plan.selectedReferenceLabels.join("/")}`
     )
     .join(" | ");
 
@@ -16,17 +41,19 @@ export function buildPromptPreview(
     panel.prompt.sceneSummary || "Carry over location, weather, and emotional tone from prior panel.",
     panel.prompt.shotType ? `Preferred shot: ${panel.prompt.shotType}` : "",
     panel.prompt.styleNotes ? `Style anchor: ${panel.prompt.styleNotes}` : "",
-    characters.length > 0
-      ? `Keep identity stable for ${characters.map((item) => item.name).join(", ")} and avoid ${characters
-          .flatMap((item) => item.consistency.forbiddenDrift)
-          .join(", ")}.`
-      : ""
+    ...buildRevisionHints(panel),
+    consistencyPlan.summary,
+    ...consistencyPlan.globalHints,
+    ...consistencyPlan.characterPlans.flatMap((plan) => [...plan.promptHints.slice(0, 2), ...plan.warnings.slice(0, 1)])
   ].filter(Boolean);
 
   const optimizedPrompt = [
     workflow?.promptPrefix,
     panel.prompt.prompt,
     characterLine ? `Character anchors: ${characterLine}` : "",
+    consistencyPlan.characterPlans.length
+      ? `Consistency locks: ${[...consistencyPlan.globalHints, ...consistencyPlan.characterPlans.map((plan) => plan.anchorSummary)].filter(Boolean).join(" | ")}`
+      : "",
     continuityHints.join(" "),
     "Preserve manga readability and maintain clean silhouette separation between foreground and background."
   ]
@@ -37,6 +64,7 @@ export function buildPromptPreview(
     userPrompt: panel.prompt.prompt,
     optimizedPrompt,
     continuityHints,
-    sceneState: panel.prompt.sceneSummary || "No scene summary yet."
+    sceneState: panel.prompt.sceneSummary || "No scene summary yet.",
+    consistencyPlan
   };
 }

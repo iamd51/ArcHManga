@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import type { CharacterProfile, ComicPanel, ComicProject, WorkflowPreset } from "@archmanga/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   cancelGenerationJob,
@@ -12,6 +13,57 @@ import {
   saveProject
 } from "@/lib/api";
 import { useCurrentPage, useEditorStore, useSelectedPanel, useSelectedWorkflow } from "@/store/editor-store";
+
+export interface GenerationRequestTarget {
+  panel?: ComicPanel;
+  workflow?: WorkflowPreset | null;
+  characters?: CharacterProfile[];
+  pageId?: string;
+}
+
+function hasActiveRevisionIntent(panel: ComicPanel) {
+  const revisionIntent = panel.prompt.revisionIntent;
+  return Boolean(
+    panel.imageUrl &&
+      (revisionIntent.preserveComposition ||
+        revisionIntent.preserveBackground ||
+        revisionIntent.changeInstructions ||
+        revisionIntent.editPriority !== "general")
+  );
+}
+
+export function resolveGenerationWorkflow(
+  project: ComicProject,
+  panel: ComicPanel,
+  preferredWorkflow?: WorkflowPreset | null
+) {
+  const shouldPreferRegeneration = hasActiveRevisionIntent(panel);
+  if (shouldPreferRegeneration) {
+    const regenerationWorkflow =
+      (panel.inpaintMask.enabled
+        ? project.workflows.find(
+            (workflow) =>
+              workflow.mode === panel.mode &&
+              workflow.controls.includes("img2img") &&
+              workflow.controls.includes("inpaint")
+          )
+        : null) ??
+      project.workflows.find(
+        (workflow) => workflow.mode === panel.mode && workflow.controls.includes("img2img")
+      ) ?? null;
+    if (regenerationWorkflow) {
+      return regenerationWorkflow;
+    }
+  }
+
+  return (
+    preferredWorkflow ??
+    project.workflows.find((workflow) => workflow.id === panel.workflowPresetId) ??
+    project.workflows.find((workflow) => workflow.mode === panel.mode) ??
+    project.workflows[0] ??
+    null
+  );
+}
 
 export function useBootstrapProject() {
   const hydrateProject = useEditorStore((state) => state.hydrateProject);
@@ -70,35 +122,42 @@ export function useGenerationActions() {
   });
 
   const generationMutation = useMutation({
-    mutationFn: async () => {
-      if (!selectedPanel || !selectedWorkflow) {
+    mutationFn: async (target?: GenerationRequestTarget) => {
+      const panel = target?.panel ?? selectedPanel;
+      const workflow = panel ? resolveGenerationWorkflow(project, panel, target?.workflow ?? selectedWorkflow) : null;
+      const characters = target?.characters ?? attachedCharacters;
+      const pageId = target?.pageId ?? currentPage.id;
+
+      if (!panel || !workflow) {
         throw new Error("Select a panel and workflow first.");
       }
       return createGenerationJob({
         projectId: project.id,
-        pageId: currentPage.id,
-        panel: selectedPanel,
-        workflow: selectedWorkflow,
-        characters: attachedCharacters
+        pageId,
+        panel,
+        workflow,
+        characters
       });
     },
-    onMutate: () => {
-      if (selectedPanel) {
-        setPanelJobStatus(selectedPanel.id, "queued");
+    onMutate: (target) => {
+      const panelId = target?.panel?.id ?? selectedPanel?.id;
+      if (panelId) {
+        setPanelJobStatus(panelId, "queued");
       }
     },
-    onSuccess: (result) => {
+    onSuccess: (result, target) => {
+      const panelId = target?.panel?.id ?? selectedPanel?.id;
       setPromptPreview(result.promptPreview);
       setActiveJob({
         jobId: result.jobId,
-        panelId: selectedPanel?.id,
+        panelId,
         status: "queued",
         promptId: undefined,
         imageUrls: [],
         detail: "Submitted to generation queue."
       });
-      if (selectedPanel) {
-        setPanelJobStatus(selectedPanel.id, "queued");
+      if (panelId) {
+        setPanelJobStatus(panelId, "queued");
       }
       queryClient.invalidateQueries({ queryKey: ["generation-job", result.jobId] });
     }

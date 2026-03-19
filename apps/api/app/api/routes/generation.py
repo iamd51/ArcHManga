@@ -3,6 +3,8 @@ from fastapi import APIRouter
 from app.schemas.generation import (
     ContinuityDraftRequest,
     ContinuityDraftResponse,
+    DirectorDraftRequest,
+    DirectorDraftResponse,
     GenerationCancelResponse,
     GenerationJobRequest,
     GenerationJobResponse,
@@ -24,6 +26,11 @@ async def prompt_preview(payload: PromptPreviewRequest) -> PromptPreviewResponse
 @router.post("/generation/continuity-draft", response_model=ContinuityDraftResponse)
 async def continuity_draft(payload: ContinuityDraftRequest) -> ContinuityDraftResponse:
     return await qwen_prompt_service.build_continuity_draft(payload)
+
+
+@router.post("/generation/director-draft", response_model=DirectorDraftResponse)
+async def director_draft(payload: DirectorDraftRequest) -> DirectorDraftResponse:
+    return await qwen_prompt_service.build_director_draft(payload)
 
 
 @router.post("/generation/jobs", response_model=GenerationJobResponse)

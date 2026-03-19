@@ -102,6 +102,33 @@ class CharacterProfile(ApiModel):
     adapter: CharacterConsistencyAdapter = Field(default_factory=CharacterConsistencyAdapter)
 
 
+class CharacterConsistencySelection(ApiModel):
+    character_id: str
+    character_name: str
+    readiness: str = "weak"
+    score: int = 0
+    anchor_summary: str = ""
+    wardrobe_lock: str = ""
+    expression_cue: str = ""
+    selected_reference_ids: list[str] = Field(default_factory=list)
+    selected_reference_labels: list[str] = Field(default_factory=list)
+    selected_reference_urls: list[str] = Field(default_factory=list)
+    adapter_provider: str = "none"
+    adapter_enabled: bool = False
+    adapter_weight: float = 0
+    prompt_hints: list[str] = Field(default_factory=list)
+    negative_hints: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
+class PanelConsistencyPlan(ApiModel):
+    readiness: str = "weak"
+    score: int = 0
+    summary: str = ""
+    global_hints: list[str] = Field(default_factory=list)
+    character_plans: list[CharacterConsistencySelection] = Field(default_factory=list)
+
+
 class CharacterUpdateRequest(ApiModel):
     reference_notes: str | None = None
     negative_prompt: str | None = None
@@ -116,12 +143,21 @@ class CharacterReferenceUpdateRequest(ApiModel):
     notes: str | None = None
 
 
+class RevisionIntent(ApiModel):
+    preserve_composition: bool = False
+    preserve_background: bool = False
+    preserve_character_identity: bool = True
+    edit_priority: str = "general"
+    change_instructions: str = ""
+
+
 class PanelPromptSettings(ApiModel):
     prompt: str = ""
     negative_prompt: str = ""
     scene_summary: str = ""
     shot_type: str = ""
     style_notes: str = ""
+    revision_intent: RevisionIntent = Field(default_factory=RevisionIntent)
 
 
 class GenerationSettings(ApiModel):
@@ -133,6 +169,15 @@ class GenerationSettings(ApiModel):
     sampler: str
     scheduler: str
     denoise: float = 1.0
+
+
+class InpaintMask(ApiModel):
+    enabled: bool = False
+    x: float = 0.25
+    y: float = 0.2
+    width: float = 0.5
+    height: float = 0.4
+    feather: int = 24
 
 
 class SceneMemory(ApiModel):
@@ -168,6 +213,7 @@ class ComicPanel(ApiModel):
     character_ids: list[str] = Field(default_factory=list)
     prompt: PanelPromptSettings = Field(default_factory=PanelPromptSettings)
     scene_memory_id: str | None = None
+    inpaint_mask: InpaintMask = Field(default_factory=InpaintMask)
     generation: GenerationSettings
     image_url: str | None = None
     latest_job_status: str = "idle"

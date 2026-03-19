@@ -2,6 +2,8 @@
 
 import Image from "next/image";
 import { useMutation } from "@tanstack/react-query";
+import { buildConsistencyPreflight } from "@/lib/character-consistency";
+import { MASK_PRESETS, applyMaskPreset } from "@/lib/mask-presets";
 import {
   deleteCharacterReference,
   updateCharacterReference as updateCharacterReferenceRequest,
@@ -33,12 +35,20 @@ const bindingSources = [
   "negative_prompt",
   "width",
   "height",
+  "denoise",
   "steps",
   "cfg",
   "sampler",
   "scheduler",
   "seed",
+  "source_image_url",
+  "mask_image_url",
   "reference_image_url",
+  "primary_reference_image_url",
+  "face_reference_image_url",
+  "full_body_reference_image_url",
+  "outfit_reference_image_url",
+  "expression_reference_image_url",
   "adapter_weight"
 ] as const;
 
@@ -57,6 +67,7 @@ export function Inspector({
   const selectedWorkflow = useSelectedWorkflow();
   const updatePanelPrompt = useEditorStore((state) => state.updatePanelPrompt);
   const updatePanelMeta = useEditorStore((state) => state.updatePanelMeta);
+  const updatePanelInpaintMask = useEditorStore((state) => state.updatePanelInpaintMask);
   const updatePanelGeneration = useEditorStore((state) => state.updatePanelGeneration);
   const updateSceneMemoryLocal = useEditorStore((state) => state.updateSceneMemory);
   const replaceSceneMemory = useEditorStore((state) => state.replaceSceneMemory);
@@ -168,6 +179,10 @@ export function Inspector({
     selectedPanel.characterIds.includes(character.id)
   );
   const preview = promptPreview ?? buildPromptPreview(selectedPanel, selectedWorkflow ?? undefined, attachedCharacters);
+  const consistencyPlanByCharacterId = new Map(
+    preview.consistencyPlan.characterPlans.map((plan) => [plan.characterId, plan])
+  );
+  const consistencyPreflight = buildConsistencyPreflight(preview.consistencyPlan);
   const workflowNodeOptions = selectedWorkflow
     ? Object.entries(selectedWorkflow.workflowJson).map(([nodeId, node]) => ({
         nodeId,
@@ -453,6 +468,101 @@ export function Inspector({
         </div>
 
         <div className="stack">
+          <label className="label">Revision controls</label>
+          <div className="meta-row">
+            <label className="chip">
+              <input
+                type="checkbox"
+                checked={selectedPanel.prompt.revisionIntent.preserveComposition}
+                onChange={(event) =>
+                  updatePanelPrompt(selectedPanel.id, {
+                    revisionIntent: {
+                      ...selectedPanel.prompt.revisionIntent,
+                      preserveComposition: event.target.checked
+                    }
+                  })
+                }
+              />
+              Keep composition
+            </label>
+            <label className="chip">
+              <input
+                type="checkbox"
+                checked={selectedPanel.prompt.revisionIntent.preserveBackground}
+                onChange={(event) =>
+                  updatePanelPrompt(selectedPanel.id, {
+                    revisionIntent: {
+                      ...selectedPanel.prompt.revisionIntent,
+                      preserveBackground: event.target.checked
+                    }
+                  })
+                }
+              />
+              Keep background
+            </label>
+            <label className="chip">
+              <input
+                type="checkbox"
+                checked={selectedPanel.prompt.revisionIntent.preserveCharacterIdentity}
+                onChange={(event) =>
+                  updatePanelPrompt(selectedPanel.id, {
+                    revisionIntent: {
+                      ...selectedPanel.prompt.revisionIntent,
+                      preserveCharacterIdentity: event.target.checked
+                    }
+                  })
+                }
+              />
+              Keep identity
+            </label>
+          </div>
+          <div className="two-column">
+            <div className="stack">
+              <label className="label" htmlFor="revision-priority">
+                Edit priority
+              </label>
+              <select
+                id="revision-priority"
+                className="select"
+                value={selectedPanel.prompt.revisionIntent.editPriority}
+                onChange={(event) =>
+                  updatePanelPrompt(selectedPanel.id, {
+                    revisionIntent: {
+                      ...selectedPanel.prompt.revisionIntent,
+                      editPriority: event.target.value as
+                        | "general"
+                        | "expression"
+                        | "pose"
+                        | "camera"
+                        | "lighting"
+                    }
+                  })
+                }
+              >
+                <option value="general">general</option>
+                <option value="expression">expression</option>
+                <option value="pose">pose</option>
+                <option value="camera">camera</option>
+                <option value="lighting">lighting</option>
+              </select>
+            </div>
+          </div>
+          <textarea
+            className="textarea compact"
+            value={selectedPanel.prompt.revisionIntent.changeInstructions}
+            onChange={(event) =>
+              updatePanelPrompt(selectedPanel.id, {
+                revisionIntent: {
+                  ...selectedPanel.prompt.revisionIntent,
+                  changeInstructions: event.target.value
+                }
+              })
+            }
+            placeholder="Example: keep the framing, only change Rin to a startled expression."
+          />
+        </div>
+
+        <div className="stack">
           <label className="label" htmlFor="negative-prompt">
             Negative prompt
           </label>
@@ -544,6 +654,135 @@ export function Inspector({
       </section>
 
       <section className="panel-section">
+        <h3>Inpaint Mask</h3>
+        <p>Use a simple rectangular mask to confine redraws when the workflow supports inpaint/img2img inputs.</p>
+        <div className="meta-row">
+          <label className="chip">
+            <input
+              type="checkbox"
+              checked={selectedPanel.inpaintMask.enabled}
+              onChange={(event) =>
+                updatePanelInpaintMask(selectedPanel.id, { enabled: event.target.checked })
+              }
+            />
+            Enable inpaint mask
+          </label>
+        </div>
+        <div className="meta-row">
+          {MASK_PRESETS.map((preset) => (
+            <button
+              key={preset.id}
+              className="chip"
+              type="button"
+              onClick={() =>
+                updatePanelInpaintMask(
+                  selectedPanel.id,
+                  applyMaskPreset(selectedPanel, preset.id)
+                )
+              }
+            >
+              {preset.label}
+            </button>
+          ))}
+        </div>
+        <div className="hint-box">
+          Quick templates help you start with a sensible mask for expression, pose, or detail fixes.
+        </div>
+        <div className="two-column">
+          <div className="stack">
+            <label className="label" htmlFor="mask-x">
+              Left %
+            </label>
+            <input
+              id="mask-x"
+              className="input"
+              type="number"
+              min={0}
+              max={100}
+              value={Math.round(selectedPanel.inpaintMask.x * 100)}
+              onChange={(event) =>
+                updatePanelInpaintMask(selectedPanel.id, {
+                  x: Math.min(0.95, Math.max(0, Number(event.target.value) / 100))
+                })
+              }
+            />
+          </div>
+          <div className="stack">
+            <label className="label" htmlFor="mask-y">
+              Top %
+            </label>
+            <input
+              id="mask-y"
+              className="input"
+              type="number"
+              min={0}
+              max={100}
+              value={Math.round(selectedPanel.inpaintMask.y * 100)}
+              onChange={(event) =>
+                updatePanelInpaintMask(selectedPanel.id, {
+                  y: Math.min(0.95, Math.max(0, Number(event.target.value) / 100))
+                })
+              }
+            />
+          </div>
+          <div className="stack">
+            <label className="label" htmlFor="mask-width">
+              Width %
+            </label>
+            <input
+              id="mask-width"
+              className="input"
+              type="number"
+              min={5}
+              max={100}
+              value={Math.round(selectedPanel.inpaintMask.width * 100)}
+              onChange={(event) =>
+                updatePanelInpaintMask(selectedPanel.id, {
+                  width: Math.min(1, Math.max(0.05, Number(event.target.value) / 100))
+                })
+              }
+            />
+          </div>
+          <div className="stack">
+            <label className="label" htmlFor="mask-height">
+              Height %
+            </label>
+            <input
+              id="mask-height"
+              className="input"
+              type="number"
+              min={5}
+              max={100}
+              value={Math.round(selectedPanel.inpaintMask.height * 100)}
+              onChange={(event) =>
+                updatePanelInpaintMask(selectedPanel.id, {
+                  height: Math.min(1, Math.max(0.05, Number(event.target.value) / 100))
+                })
+              }
+            />
+          </div>
+          <div className="stack">
+            <label className="label" htmlFor="mask-feather">
+              Feather
+            </label>
+            <input
+              id="mask-feather"
+              className="input"
+              type="number"
+              min={0}
+              max={96}
+              value={selectedPanel.inpaintMask.feather}
+              onChange={(event) =>
+                updatePanelInpaintMask(selectedPanel.id, {
+                  feather: Math.min(96, Math.max(0, Number(event.target.value)))
+                })
+              }
+            />
+          </div>
+        </div>
+      </section>
+
+      <section className="panel-section">
         <h3>Character Anchors</h3>
         <div className="meta-row">
           {project.characters.map((character) => {
@@ -568,8 +807,10 @@ export function Inspector({
 
         {attachedCharacters.length > 0 ? (
           <div className="card-grid">
-            {attachedCharacters.map((character) => (
-              <div key={character.id} className="mini-card active">
+            {attachedCharacters.map((character) => {
+              const consistencyPlan = consistencyPlanByCharacterId.get(character.id);
+              return (
+                <div key={character.id} className="mini-card active">
                 <strong>{character.name}</strong>
                 <span>{character.consistency.anchorFeatures.join(" · ")}</span>
                 <div className="two-column">
@@ -614,6 +855,12 @@ export function Inspector({
                   }
                 />
                 <span>Forbidden drift: {character.consistency.forbiddenDrift.join(" · ")}</span>
+                <span>
+                  Consistency score:{" "}
+                  {consistencyPlan?.score ?? 0}
+                  {" · "}
+                  {consistencyPlan?.readiness ?? "weak"}
+                </span>
                 <div className="stack">
                   <strong>Reference Manager</strong>
                   {character.references.length > 0 ? (
@@ -766,8 +1013,9 @@ export function Inspector({
                     event.target.value = "";
                   }}
                 />
-              </div>
-            ))}
+                </div>
+              );
+            })}
           </div>
         ) : (
           <div className="hint-box">
@@ -938,6 +1186,27 @@ export function Inspector({
       <section className="panel-section">
         <h3>Prompt Preview</h3>
         <div className="hint-box">{preview.optimizedPrompt}</div>
+        <div className="hint-box">
+          <strong>Consistency Plan</strong>
+          <br />
+          {preview.consistencyPlan.summary}
+          <br />
+          Score: {preview.consistencyPlan.score} · {preview.consistencyPlan.readiness}
+        </div>
+        <div
+          className={`callout ${
+            consistencyPreflight.status === "ready"
+              ? "callout-info"
+              : consistencyPreflight.status === "caution"
+                ? "callout-warning"
+                : "callout-warning"
+          }`}
+        >
+          {consistencyPreflight.title}
+        </div>
+        {consistencyPreflight.reasons.length ? (
+          <div className="hint-box">{consistencyPreflight.reasons.join(" ")}</div>
+        ) : null}
         <div className="meta-row">
           {preview.continuityHints.map((hint) => (
             <span key={hint} className="chip">
@@ -945,6 +1214,38 @@ export function Inspector({
             </span>
           ))}
         </div>
+        {preview.consistencyPlan.globalHints.length ? (
+          <div className="meta-row">
+            {preview.consistencyPlan.globalHints.map((hint) => (
+              <span key={hint} className="chip active">
+                {hint}
+              </span>
+            ))}
+          </div>
+        ) : null}
+        {preview.consistencyPlan.characterPlans.length ? (
+          <div className="card-grid">
+            {preview.consistencyPlan.characterPlans.map((plan) => (
+              <div key={plan.characterId} className="mini-card">
+                <div className="status-row">
+                  <strong>{plan.characterName}</strong>
+                  <span className="status-pill">
+                    {plan.readiness} · {plan.score}
+                  </span>
+                </div>
+                <span>{plan.anchorSummary}</span>
+                {plan.selectedReferenceLabels.length ? (
+                  <span>Refs: {plan.selectedReferenceLabels.join(" · ")}</span>
+                ) : (
+                  <span>Refs: none</span>
+                )}
+                {plan.warnings.length ? (
+                  <div className="hint-box">{plan.warnings.join(" ")}</div>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        ) : null}
         {sceneMemory ? (
           <div className="hint-box">
             <strong>{sceneMemory.location}</strong>

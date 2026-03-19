@@ -96,9 +96,9 @@ export function Sidebar() {
   const [workflowName, setWorkflowName] = useState("Imported Workflow");
   const [workflowDescription, setWorkflowDescription] = useState("Imported from a ComfyUI API JSON file.");
   const [workflowMode, setWorkflowMode] = useState<"bw" | "color">("bw");
-  const [templateKey, setTemplateKey] = useState<"sdxl_text2img" | "sdxl_manga" | "sdxl_color_story">(
-    "sdxl_text2img"
-  );
+  const [templateKey, setTemplateKey] = useState<
+    "sdxl_text2img" | "sdxl_manga" | "sdxl_color_story" | "sdxl_manga_regen" | "sdxl_color_regen"
+  >("sdxl_text2img");
   const [promptPrefix, setPromptPrefix] = useState("");
   const [workflowJsonText, setWorkflowJsonText] = useState("");
   const [importValidation, setImportValidation] = useState<WorkflowValidationResult | null>(null);
@@ -278,13 +278,20 @@ export function Sidebar() {
               value={templateKey}
               onChange={(event) =>
                 setTemplateKey(
-                  event.target.value as "sdxl_text2img" | "sdxl_manga" | "sdxl_color_story"
+                  event.target.value as
+                    | "sdxl_text2img"
+                    | "sdxl_manga"
+                    | "sdxl_color_story"
+                    | "sdxl_manga_regen"
+                    | "sdxl_color_regen"
                 )
               }
             >
               <option value="sdxl_text2img">sdxl_text2img</option>
               <option value="sdxl_manga">sdxl_manga</option>
               <option value="sdxl_color_story">sdxl_color_story</option>
+              <option value="sdxl_manga_regen">sdxl_manga_regen</option>
+              <option value="sdxl_color_regen">sdxl_color_regen</option>
             </select>
           </div>
           <input

@@ -3,6 +3,7 @@
 import { startTransition, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import type { Stage as KonvaStage } from "konva/lib/Stage";
+import { DirectorConsole } from "@/components/editor/director-console";
 import { Inspector } from "@/components/editor/inspector";
 import { Sidebar } from "@/components/editor/sidebar";
 import { useBootstrapProject, useGenerationActions, useProjectPersistence } from "@/lib/use-generation";
@@ -173,7 +174,7 @@ export function ComicEditor() {
               disabled={!selectedPanel || generationMutation.isPending}
               onClick={() => {
                 startTransition(() => {
-                  generationMutation.mutate();
+                  generationMutation.mutate(undefined);
                 });
               }}
             >
@@ -195,10 +196,14 @@ export function ComicEditor() {
           </div>
         ) : null}
 
+        <DirectorConsole
+          generationPending={generationMutation.isPending}
+          onGeneratePanel={(payload) => generationMutation.mutate(payload)}
+        />
         <PageCanvas stageRef={stageRef} renderMode={renderMode} />
       </section>
       <Inspector
-        onGenerate={() => generationMutation.mutate()}
+        onGenerate={() => generationMutation.mutate(undefined)}
         onContinuityDraft={() => continuityDraftMutation.mutate()}
         onPreviewPrompt={() => promptPreviewMutation.mutate()}
         generationPending={generationMutation.isPending}

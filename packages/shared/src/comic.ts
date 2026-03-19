@@ -20,12 +20,20 @@ export interface WorkflowNodeBinding {
     | "negative_prompt"
     | "width"
     | "height"
+    | "denoise"
     | "steps"
     | "cfg"
     | "sampler"
     | "scheduler"
     | "seed"
+    | "source_image_url"
+    | "mask_image_url"
     | "reference_image_url"
+    | "primary_reference_image_url"
+    | "face_reference_image_url"
+    | "full_body_reference_image_url"
+    | "outfit_reference_image_url"
+    | "expression_reference_image_url"
     | "adapter_weight";
   provider?: "generic" | "ip-adapter" | "instantid";
   characterIndex?: number;
@@ -48,7 +56,12 @@ export interface WorkflowPreset {
   modelFamily: "sdxl";
   promptPrefix: string;
   controls: string[];
-  templateKey: "sdxl_text2img" | "sdxl_manga" | "sdxl_color_story";
+  templateKey:
+    | "sdxl_text2img"
+    | "sdxl_manga"
+    | "sdxl_color_story"
+    | "sdxl_manga_regen"
+    | "sdxl_color_regen";
   parameters: WorkflowParameter[];
   nodeBindings: WorkflowNodeBinding[];
   workflowJson: Record<string, { class_type?: string; inputs?: Record<string, unknown> }>;
@@ -125,12 +138,48 @@ export interface CharacterProfile {
   adapter: CharacterConsistencyAdapter;
 }
 
+export interface CharacterConsistencySelection {
+  characterId: string;
+  characterName: string;
+  readiness: "strong" | "partial" | "weak";
+  score: number;
+  anchorSummary: string;
+  wardrobeLock: string;
+  expressionCue: string;
+  selectedReferenceIds: string[];
+  selectedReferenceLabels: string[];
+  selectedReferenceUrls: string[];
+  adapterProvider: "none" | "ip-adapter" | "instantid";
+  adapterEnabled: boolean;
+  adapterWeight: number;
+  promptHints: string[];
+  negativeHints: string[];
+  warnings: string[];
+}
+
+export interface PanelConsistencyPlan {
+  readiness: "strong" | "partial" | "weak";
+  score: number;
+  summary: string;
+  globalHints: string[];
+  characterPlans: CharacterConsistencySelection[];
+}
+
 export interface PanelPromptSettings {
   prompt: string;
   negativePrompt: string;
   sceneSummary: string;
   shotType: string;
   styleNotes: string;
+  revisionIntent: RevisionIntent;
+}
+
+export interface RevisionIntent {
+  preserveComposition: boolean;
+  preserveBackground: boolean;
+  preserveCharacterIdentity: boolean;
+  editPriority: "general" | "expression" | "pose" | "camera" | "lighting";
+  changeInstructions: string;
 }
 
 export interface GenerationSettings {
@@ -142,6 +191,15 @@ export interface GenerationSettings {
   sampler: string;
   scheduler: string;
   denoise: number;
+}
+
+export interface InpaintMask {
+  enabled: boolean;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  feather: number;
 }
 
 export interface SceneMemory {
@@ -168,6 +226,7 @@ export interface ComicPanel {
   characterIds: string[];
   prompt: PanelPromptSettings;
   sceneMemoryId?: string;
+  inpaintMask: InpaintMask;
   generation: GenerationSettings;
   imageUrl?: string;
   latestJobStatus?: "idle" | "queued" | "running" | "complete" | "failed";
@@ -204,6 +263,50 @@ export interface PromptPreview {
   optimizedPrompt: string;
   continuityHints: string[];
   sceneState: string;
+  consistencyPlan: PanelConsistencyPlan;
+}
+
+export interface DirectorChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export interface DirectorBeat {
+  id: string;
+  title: string;
+  description: string;
+  shotType: string;
+  mode: GenerationMode;
+  focusCharacterIds: string[];
+}
+
+export interface DirectorPanelSuggestion {
+  prompt: string;
+  sceneSummary: string;
+  shotType: string;
+  styleNotes: string;
+  mode?: GenerationMode;
+  characterIds: string[];
+  revisionIntent?: RevisionIntent;
+}
+
+export interface DirectorSceneSuggestion {
+  location: string;
+  timeOfDay: string;
+  weather: string;
+  lighting: string;
+  mood: string;
+  continuityNotes: string;
+}
+
+export interface DirectorDraftResult {
+  assistantMessage: string;
+  continuityHints: string[];
+  suggestedPanelCount: number;
+  selectedCharacterIds: string[];
+  suggestedBeats: DirectorBeat[];
+  panelSuggestion?: DirectorPanelSuggestion;
+  sceneSuggestion?: DirectorSceneSuggestion;
 }
 
 export interface GenerationJobState {
