@@ -3,7 +3,11 @@
 import { useEffect } from "react";
 import type { CharacterProfile, ComicPanel, ComicProject, WorkflowPreset } from "@archmanga/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { buildConsistencyPreflight, buildPanelConsistencyPlan } from "@/lib/character-consistency";
+import {
+  buildConsistencyPreflight,
+  buildPanelConsistencyPlan,
+  buildPanelContinuitySnapshot
+} from "@/lib/character-consistency";
 import {
   cancelGenerationJob,
   createContinuityDraft,
@@ -96,7 +100,7 @@ export function useGenerationActions() {
   const setPromptPreview = useEditorStore((state) => state.setPromptPreview);
   const setActiveJob = useEditorStore((state) => state.setActiveJob);
   const setPanelJobStatus = useEditorStore((state) => state.setPanelJobStatus);
-  const setPanelImage = useEditorStore((state) => state.setPanelImage);
+  const setPanelRenderResult = useEditorStore((state) => state.setPanelRenderResult);
   const selectedPanel = useSelectedPanel();
   const selectedWorkflow = useSelectedWorkflow();
   const currentPage = useCurrentPage();
@@ -253,7 +257,16 @@ export function useGenerationActions() {
     if (job.status === "complete") {
       setPanelJobStatus(job.panelId, "complete");
       if (job.imageUrls[0]) {
-        setPanelImage(job.panelId, job.imageUrls[0]);
+        const completedPanel = project.pages
+          .flatMap((page) => page.panels)
+          .find((panel) => panel.id === job.panelId);
+        const completedCharacters = completedPanel
+          ? project.characters.filter((character) => completedPanel.characterIds.includes(character.id))
+          : [];
+        const continuitySnapshot = completedPanel
+          ? buildPanelContinuitySnapshot(completedPanel, completedCharacters)
+          : undefined;
+        setPanelRenderResult(job.panelId, job.imageUrls[0], continuitySnapshot);
       }
     }
     if (job.status === "failed" || job.status === "missing") {
@@ -262,7 +275,7 @@ export function useGenerationActions() {
     if (job.status === "cancelled") {
       setPanelJobStatus(job.panelId, "failed");
     }
-  }, [jobQuery.data, setActiveJob, setPanelImage, setPanelJobStatus]);
+  }, [jobQuery.data, project, setActiveJob, setPanelJobStatus, setPanelRenderResult]);
 
   return {
     promptPreviewMutation,

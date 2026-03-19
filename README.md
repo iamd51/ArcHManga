@@ -54,6 +54,7 @@ The workspace already includes:
 - workflow mappings can now target explicit role-based references such as face, full-body, outfit, and expression anchors
 - the inspector now surfaces a consistency preflight state so weak character anchors are visible before you submit a render
 - built-in SDXL workflows now chain multiple adapter stages so face, body, and outfit anchors can all participate in one generation pass
+- successful renders now write a panel continuity snapshot so later beats can carry forward character state instead of relying only on the raw prompt
 - FastAPI endpoints for bootstrap project data, prompt preview, generation submit, and job polling
 - a mock ComfyUI completion path so the end-to-end UX can be tested before a real worker is connected
 

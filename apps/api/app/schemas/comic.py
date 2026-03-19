@@ -190,6 +190,26 @@ class SceneMemory(ApiModel):
     continuity_notes: str
 
 
+class CharacterContinuityState(ApiModel):
+    character_id: str
+    character_name: str
+    expression: str = ""
+    wardrobe: str = ""
+    pose_cue: str = ""
+    framing_cue: str = ""
+    carried_reference_ids: list[str] = Field(default_factory=list)
+    notes: str = ""
+
+
+class PanelContinuitySnapshot(ApiModel):
+    continuity_summary: str = ""
+    source_prompt: str = ""
+    shot_type: str = ""
+    scene_summary: str = ""
+    style_notes: str = ""
+    character_states: list[CharacterContinuityState] = Field(default_factory=list)
+
+
 class SceneMemoryUpdateRequest(ApiModel):
     location: str | None = None
     time_of_day: str | None = None
@@ -213,6 +233,7 @@ class ComicPanel(ApiModel):
     character_ids: list[str] = Field(default_factory=list)
     prompt: PanelPromptSettings = Field(default_factory=PanelPromptSettings)
     scene_memory_id: str | None = None
+    continuity_snapshot: PanelContinuitySnapshot | None = None
     inpaint_mask: InpaintMask = Field(default_factory=InpaintMask)
     generation: GenerationSettings
     image_url: str | None = None

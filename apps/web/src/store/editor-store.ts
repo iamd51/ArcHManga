@@ -62,7 +62,11 @@ interface EditorState {
   setPromptPreview: (preview: PromptPreview | null) => void;
   setActiveJob: (job: GenerationJobState | null) => void;
   setPanelJobStatus: (panelId: string, status: ComicPanel["latestJobStatus"]) => void;
-  setPanelImage: (panelId: string, imageUrl: string | undefined) => void;
+  setPanelRenderResult: (
+    panelId: string,
+    imageUrl: string | undefined,
+    continuitySnapshot?: ComicPanel["continuitySnapshot"]
+  ) => void;
   updateCharacter: (characterId: string, updates: Partial<CharacterProfile>) => void;
   replaceCharacter: (character: CharacterProfile) => void;
   appendCharacterReference: (
@@ -525,6 +529,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             title: `${panel.title}${index === 0 ? " Copy" : ""}`,
             latestJobStatus: "idle",
             imageUrl: undefined,
+            continuitySnapshot: undefined,
             generation: {
               ...panel.generation,
               seed: Math.floor(Math.random() * 10_000_000)
@@ -596,6 +601,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             x: source.x + 24,
             y: source.y + 24,
             latestJobStatus: "idle",
+            continuitySnapshot: undefined,
             generation: {
               ...source.generation,
               seed: Math.floor(Math.random() * 10_000_000)
@@ -615,10 +621,12 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       ),
       isDirty: true
     })),
-  setPanelImage: (panelId, imageUrl) =>
+  setPanelRenderResult: (panelId, imageUrl, continuitySnapshot) =>
     set((state) => ({
       project: updateCurrentPage(state.project, state.selectedPageId, (panels) =>
-        panels.map((panel) => (panel.id === panelId ? { ...panel, imageUrl } : panel))
+        panels.map((panel) =>
+          panel.id === panelId ? { ...panel, imageUrl, continuitySnapshot } : panel
+        )
       ),
       isDirty: true
     })),

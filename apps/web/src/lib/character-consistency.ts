@@ -1,7 +1,9 @@
 import type {
+  CharacterContinuityState,
   CharacterConsistencySelection,
   CharacterProfile,
   ComicPanel,
+  PanelContinuitySnapshot,
   PanelConsistencyPlan
 } from "@archmanga/shared";
 
@@ -231,5 +233,46 @@ export function buildConsistencyPreflight(plan: PanelConsistencyPlan): Consisten
     status: "ready",
     title: "Consistency anchors look strong",
     reasons: plan.globalHints
+  };
+}
+
+export function buildPanelContinuitySnapshot(
+  panel: ComicPanel,
+  characters: CharacterProfile[],
+  plan: PanelConsistencyPlan = buildPanelConsistencyPlan(panel, characters)
+): PanelContinuitySnapshot {
+  const characterStates: CharacterContinuityState[] = plan.characterPlans.map((characterPlan) => ({
+    characterId: characterPlan.characterId,
+    characterName: characterPlan.characterName,
+    expression:
+      characterPlan.expressionCue ||
+      characters.find((character) => character.id === characterPlan.characterId)?.consistency.expressionDefaults[0] ||
+      "",
+    wardrobe: characterPlan.wardrobeLock,
+    poseCue:
+      panel.prompt.revisionIntent.editPriority === "pose"
+        ? panel.prompt.revisionIntent.changeInstructions
+        : panel.prompt.prompt,
+    framingCue: panel.prompt.shotType,
+    carriedReferenceIds: characterPlan.selectedReferenceIds,
+    notes: [characterPlan.anchorSummary, ...characterPlan.promptHints.slice(0, 1)].filter(Boolean).join(" | ")
+  }));
+
+  return {
+    continuitySummary: [
+      panel.prompt.sceneSummary || "Continue the same scene state.",
+      panel.prompt.shotType ? `Shot: ${panel.prompt.shotType}` : "",
+      characterStates.length
+        ? `Carry ${characterStates.map((state) => `${state.characterName}(${state.expression || "neutral"})`).join(", ")}`
+        : "",
+      plan.summary
+    ]
+      .filter(Boolean)
+      .join(" | "),
+    sourcePrompt: panel.prompt.prompt,
+    shotType: panel.prompt.shotType,
+    sceneSummary: panel.prompt.sceneSummary,
+    styleNotes: panel.prompt.styleNotes,
+    characterStates
   };
 }

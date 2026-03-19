@@ -17,8 +17,10 @@ interface DirectorConsoleProps {
 function buildDirectorContextSummary(args: {
   selectedPanelTitle: string;
   selectedPanelPrompt: string;
+  selectedPanelSnapshot?: string;
   previousPanelTitle?: string;
   previousPanelPrompt?: string;
+  previousPanelSnapshot?: string;
   sceneContinuity?: string;
   revisionInstructions?: string;
   selectedCharacterNames: string[];
@@ -28,8 +30,10 @@ function buildDirectorContextSummary(args: {
   const parts = [
     `Selected panel: ${args.selectedPanelTitle}`,
     args.selectedPanelPrompt ? `Current panel prompt: ${args.selectedPanelPrompt}` : "",
+    args.selectedPanelSnapshot ? `Current panel snapshot: ${args.selectedPanelSnapshot}` : "",
     args.previousPanelTitle ? `Previous panel: ${args.previousPanelTitle}` : "",
     args.previousPanelPrompt ? `Previous beat: ${args.previousPanelPrompt}` : "",
+    args.previousPanelSnapshot ? `Previous snapshot: ${args.previousPanelSnapshot}` : "",
     args.sceneContinuity ? `Scene continuity: ${args.sceneContinuity}` : "",
     args.revisionInstructions ? `Current revision lock: ${args.revisionInstructions}` : "",
     args.selectedCharacterNames.length
@@ -117,11 +121,14 @@ export function DirectorConsole({ generationPending, onGeneratePanel }: Director
   const contextSummary = buildDirectorContextSummary({
     selectedPanelTitle: selectedPanel?.title ?? currentPage.title,
     selectedPanelPrompt: selectedPanel?.prompt.prompt ?? "",
+    selectedPanelSnapshot: selectedPanel?.continuitySnapshot?.continuitySummary,
     previousPanelTitle: previousPanel?.title,
     previousPanelPrompt: previousPanel?.prompt.prompt,
+    previousPanelSnapshot: previousPanel?.continuitySnapshot?.continuitySummary,
     sceneContinuity:
       currentSceneMemory?.continuityNotes ??
       previousSceneMemory?.continuityNotes ??
+      previousPanel?.continuitySnapshot?.continuitySummary ??
       selectedPanel?.prompt.sceneSummary,
     revisionInstructions: selectedPanel
       ? [

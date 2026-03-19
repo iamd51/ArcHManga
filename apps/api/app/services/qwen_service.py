@@ -104,6 +104,12 @@ class QwenPromptService:
         user_payload = {
             "current_panel_title": payload.current_panel.title,
             "previous_panel_prompt": payload.previous_panel.prompt.prompt if payload.previous_panel else "",
+            "current_panel_snapshot": payload.current_panel.continuity_snapshot.model_dump(by_alias=True)
+            if payload.current_panel.continuity_snapshot
+            else None,
+            "previous_panel_snapshot": payload.previous_panel.continuity_snapshot.model_dump(by_alias=True)
+            if payload.previous_panel and payload.previous_panel.continuity_snapshot
+            else None,
             "previous_panel_scene_summary": payload.previous_panel.prompt.scene_summary
             if payload.previous_panel
             else "",
@@ -224,6 +230,8 @@ class QwenPromptService:
         previous_scene = (
             payload.previous_scene_memory.continuity_notes
             if payload.previous_scene_memory
+            else payload.previous_panel.continuity_snapshot.continuity_summary
+            if payload.previous_panel and payload.previous_panel.continuity_snapshot
             else payload.previous_panel.prompt.scene_summary if payload.previous_panel else ""
         )
         current_scene_bits = []
@@ -296,11 +304,17 @@ class QwenPromptService:
             "history": [message.model_dump(by_alias=True) for message in payload.history[-8:]],
             "context_summary": payload.context_summary,
             "selected_panel": payload.selected_panel.model_dump(by_alias=True) if payload.selected_panel else None,
+            "selected_panel_snapshot": payload.selected_panel.continuity_snapshot.model_dump(by_alias=True)
+            if payload.selected_panel and payload.selected_panel.continuity_snapshot
+            else None,
             "current_page": payload.current_page.model_dump(by_alias=True),
             "current_scene_memory": payload.current_scene_memory.model_dump(by_alias=True)
             if payload.current_scene_memory
             else None,
             "previous_panel": payload.previous_panel.model_dump(by_alias=True) if payload.previous_panel else None,
+            "previous_panel_snapshot": payload.previous_panel.continuity_snapshot.model_dump(by_alias=True)
+            if payload.previous_panel and payload.previous_panel.continuity_snapshot
+            else None,
             "previous_scene_memory": payload.previous_scene_memory.model_dump(by_alias=True)
             if payload.previous_scene_memory
             else None,

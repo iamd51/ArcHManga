@@ -1255,6 +1255,13 @@ export function Inspector({
             {sceneMemory.continuityNotes}
           </div>
         ) : null}
+        {selectedPanel.continuitySnapshot ? (
+          <div className="hint-box">
+            <strong>Latest Continuity Snapshot</strong>
+            <br />
+            {selectedPanel.continuitySnapshot.continuitySummary}
+          </div>
+        ) : null}
         {uploadMutation.error ? (
           <div className="callout callout-warning">
             Reference upload failed. Check that the API is running and multipart uploads are enabled.

@@ -212,6 +212,26 @@ export interface SceneMemory {
   continuityNotes: string;
 }
 
+export interface CharacterContinuityState {
+  characterId: string;
+  characterName: string;
+  expression: string;
+  wardrobe: string;
+  poseCue: string;
+  framingCue: string;
+  carriedReferenceIds: string[];
+  notes: string;
+}
+
+export interface PanelContinuitySnapshot {
+  continuitySummary: string;
+  sourcePrompt: string;
+  shotType: string;
+  sceneSummary: string;
+  styleNotes: string;
+  characterStates: CharacterContinuityState[];
+}
+
 export interface ComicPanel {
   id: string;
   title: string;
@@ -226,6 +246,7 @@ export interface ComicPanel {
   characterIds: string[];
   prompt: PanelPromptSettings;
   sceneMemoryId?: string;
+  continuitySnapshot?: PanelContinuitySnapshot;
   inpaintMask: InpaintMask;
   generation: GenerationSettings;
   imageUrl?: string;
