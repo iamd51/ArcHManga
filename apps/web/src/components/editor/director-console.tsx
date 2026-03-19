@@ -116,7 +116,7 @@ export function DirectorConsole({ generationPending, onGeneratePanel }: Director
     selectedPanel?.characterIds.includes(character.id)
   );
   const consistencyPlan = selectedPanel
-    ? buildPanelConsistencyPlan(selectedPanel, selectedCharacters)
+    ? buildPanelConsistencyPlan(selectedPanel, selectedCharacters, previousPanel)
     : null;
   const contextSummary = buildDirectorContextSummary({
     selectedPanelTitle: selectedPanel?.title ?? currentPage.title,

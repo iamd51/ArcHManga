@@ -23,6 +23,7 @@ class GenerationOrchestrator:
                 panel=payload.panel,
                 workflow=payload.workflow,
                 characters=payload.characters,
+                previous_panel=payload.previous_panel,
             )
         )
 
@@ -33,6 +34,7 @@ class GenerationOrchestrator:
             payload.workflow,
             preview.optimized_prompt,
             payload.characters,
+            payload.previous_panel,
         )
         provider_response = await comfyui_service.submit_prompt(workflow_payload)
 

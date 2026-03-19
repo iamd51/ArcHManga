@@ -181,12 +181,13 @@ def build_workflow_payload(
     workflow: WorkflowPreset,
     optimized_prompt: str,
     characters: list[CharacterProfile],
+    previous_panel: ComicPanel | None = None,
 ) -> dict:
     template = deepcopy(workflow.workflow_json or WORKFLOW_TEMPLATES.get(workflow.template_key, {}))
     if not template:
         template = deepcopy(WORKFLOW_TEMPLATES["sdxl_text2img"])
 
-    consistency_plan = build_panel_consistency_plan(panel, characters)
+    consistency_plan = build_panel_consistency_plan(panel, characters, previous_panel)
     negative_prompt = _build_negative_prompt(panel, consistency_plan)
     values = {
         "model": panel.model_id,
@@ -232,6 +233,10 @@ def build_workflow_payload(
         "workflow_preset_id": workflow.id,
         "character_ids": panel.character_ids,
         "scene_memory_id": panel.scene_memory_id,
+        "previous_panel_id": previous_panel.id if previous_panel else None,
+        "previous_panel_snapshot": previous_panel.continuity_snapshot.model_dump(by_alias=True)
+        if previous_panel and previous_panel.continuity_snapshot
+        else None,
         "source_image_url": panel.image_url,
         "mask_image_url": values["mask_image_url"],
         "computed_denoise": values["denoise"],

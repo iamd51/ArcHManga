@@ -9,14 +9,24 @@ from app.schemas.comic import (
 def build_panel_consistency_plan(
     panel: ComicPanel,
     characters: list[CharacterProfile],
+    previous_panel: ComicPanel | None = None,
 ) -> PanelConsistencyPlan:
-    character_plans = [build_character_consistency_selection(panel, character) for character in characters]
+    character_plans = [
+        build_character_consistency_selection(panel, character, previous_panel) for character in characters
+    ]
     score = round(sum(item.score for item in character_plans) / len(character_plans)) if character_plans else 0
     readiness = _resolve_readiness(score)
     active_names = ", ".join(item.character_name for item in character_plans) if character_plans else "no active characters"
     reference_count = sum(len(item.selected_reference_ids) for item in character_plans)
     global_hints = [
         "Keep wardrobe and silhouette locked across adjacent panels." if character_plans else "",
+        (
+            "Carry forward previous-panel expression, wardrobe, and framing when the same characters remain in scene."
+            if previous_panel
+            and previous_panel.continuity_snapshot
+            and previous_panel.continuity_snapshot.character_states
+            else ""
+        ),
         "Prioritize face identity over style drift during redraws."
         if panel.prompt.revision_intent.preserve_character_identity
         else "",
@@ -45,9 +55,11 @@ def build_panel_consistency_plan(
 def build_character_consistency_selection(
     panel: ComicPanel,
     character: CharacterProfile,
+    previous_panel: ComicPanel | None = None,
 ) -> CharacterConsistencySelection:
     preferred_roles = _select_preferred_roles(panel)
-    references = _select_reference_images(character, preferred_roles)
+    previous_state = _get_previous_character_state(previous_panel, character.id)
+    references = _select_reference_images(character, preferred_roles, previous_state)
     selected_reference_ids = [reference.id for reference in references]
     selected_reference_labels = [reference.label for reference in references]
     selected_reference_urls = [reference.url for reference in references]
@@ -61,6 +73,18 @@ def build_character_consistency_selection(
             if character.consistency.expression_defaults
             else ""
         ),
+        f"{character.name} carry forward expression: {previous_state.expression}."
+        if previous_state and previous_state.expression
+        else "",
+        f"{character.name} carry forward wardrobe: {previous_state.wardrobe}."
+        if previous_state and previous_state.wardrobe
+        else "",
+        f"{character.name} previous framing cue: {previous_state.framing_cue}."
+        if previous_state and previous_state.framing_cue
+        else "",
+        f"{character.name} previous pose cue: {previous_state.pose_cue}."
+        if previous_state and previous_state.pose_cue
+        else "",
         (
             f"{character.name} selected references: {', '.join(selected_reference_labels)}."
             if selected_reference_labels
@@ -73,8 +97,18 @@ def build_character_consistency_selection(
         else "",
         character.negative_prompt,
     ]
-    warnings = _build_warnings(panel, character, preferred_roles, references)
-    score = _score_character_consistency(character, references, panel)
+    warnings = _build_warnings(panel, character, preferred_roles, references, previous_state)
+    score = min(
+        100,
+        _score_character_consistency(character, references, panel)
+        + (8 if previous_state else 0)
+        + (
+            4
+            if previous_state
+            and any(reference.id in previous_state.carried_reference_ids for reference in references)
+            else 0
+        ),
+    )
     return CharacterConsistencySelection(
         character_id=character.id,
         character_name=character.name,
@@ -83,8 +117,12 @@ def build_character_consistency_selection(
         anchor_summary=_join_non_empty(
             [", ".join(character.consistency.anchor_features), character.consistency.body_shape, character.appearance]
         ),
-        wardrobe_lock=character.wardrobe,
-        expression_cue=", ".join(character.consistency.expression_defaults),
+        wardrobe_lock=previous_state.wardrobe if previous_state and previous_state.wardrobe else character.wardrobe,
+        expression_cue=(
+            previous_state.expression
+            if previous_state and previous_state.expression
+            else ", ".join(character.consistency.expression_defaults)
+        ),
         selected_reference_ids=selected_reference_ids,
         selected_reference_labels=selected_reference_labels,
         selected_reference_urls=selected_reference_urls,
@@ -107,25 +145,30 @@ def _select_preferred_roles(panel: ComicPanel) -> list[str]:
     return ["primary", "face", "full-body", "outfit", "expression", "support"]
 
 
-def _select_reference_images(character: CharacterProfile, preferred_roles: list[str]):
+def _select_reference_images(character: CharacterProfile, preferred_roles: list[str], previous_state=None):
     role_rank = {role: len(preferred_roles) - index for index, role in enumerate(preferred_roles)}
     adapter_rank = {
         reference_id: len(character.adapter.reference_image_ids) - index
         for index, reference_id in enumerate(character.adapter.reference_image_ids)
     }
+    continuity_rank = {
+        reference_id: len(previous_state.carried_reference_ids) - index
+        for index, reference_id in enumerate(previous_state.carried_reference_ids)
+    } if previous_state else {}
     ranked = sorted(
         character.references,
         key=lambda reference: (
-            role_rank.get(reference.role, 0),
-            adapter_rank.get(reference.id, 0),
-            1 if reference.role == "primary" else 0,
+            role_rank.get(reference.role, 0) * 100
+            + continuity_rank.get(reference.id, 0) * 350
+            + adapter_rank.get(reference.id, 0) * 10
+            + (1 if reference.role == "primary" else 0)
         ),
         reverse=True,
     )
     return ranked[:2]
 
 
-def _build_warnings(panel: ComicPanel, character: CharacterProfile, preferred_roles: list[str], references: list):
+def _build_warnings(panel: ComicPanel, character: CharacterProfile, preferred_roles: list[str], references: list, previous_state=None):
     warnings: list[str] = []
     roles = {reference.role for reference in character.references}
     if not character.references:
@@ -138,7 +181,22 @@ def _build_warnings(panel: ComicPanel, character: CharacterProfile, preferred_ro
         warnings.append("Full-body or outfit anchors are missing for this shot.")
     if panel.prompt.revision_intent.preserve_character_identity and not references:
         warnings.append("Identity lock is enabled, but this panel has no active reference anchors.")
+    if (
+        previous_state
+        and previous_state.carried_reference_ids
+        and not any(reference.id in previous_state.carried_reference_ids for reference in references)
+    ):
+        warnings.append("Previous-panel continuity anchors are available but not currently selected.")
     return warnings
+
+
+def _get_previous_character_state(previous_panel: ComicPanel | None, character_id: str):
+    if not previous_panel or not previous_panel.continuity_snapshot:
+        return None
+    for state in previous_panel.continuity_snapshot.character_states:
+        if state.character_id == character_id:
+            return state
+    return None
 
 
 def _score_character_consistency(character: CharacterProfile, references: list, panel: ComicPanel) -> int:

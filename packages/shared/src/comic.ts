@@ -287,6 +287,22 @@ export interface PromptPreview {
   consistencyPlan: PanelConsistencyPlan;
 }
 
+export interface PromptPreviewRequestPayload {
+  panel: ComicPanel;
+  workflow?: WorkflowPreset;
+  characters: CharacterProfile[];
+  previousPanel?: ComicPanel;
+}
+
+export interface GenerationJobRequestPayload {
+  projectId: string;
+  pageId: string;
+  panel: ComicPanel;
+  workflow: WorkflowPreset;
+  characters: CharacterProfile[];
+  previousPanel?: ComicPanel;
+}
+
 export interface DirectorChatMessage {
   role: "user" | "assistant";
   content: string;

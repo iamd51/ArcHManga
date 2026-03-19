@@ -178,7 +178,14 @@ export function Inspector({
   const attachedCharacters = project.characters.filter((character) =>
     selectedPanel.characterIds.includes(character.id)
   );
-  const preview = promptPreview ?? buildPromptPreview(selectedPanel, selectedWorkflow ?? undefined, attachedCharacters);
+  const selectedPage =
+    project.pages.find((page) => page.panels.some((panel) => panel.id === selectedPanel.id)) ?? project.pages[0];
+  const selectedPanelIndex =
+    selectedPage?.panels.findIndex((panel) => panel.id === selectedPanel.id) ?? -1;
+  const previousPanel = selectedPanelIndex > 0 ? selectedPage.panels[selectedPanelIndex - 1] : undefined;
+  const preview =
+    promptPreview ??
+    buildPromptPreview(selectedPanel, selectedWorkflow ?? undefined, attachedCharacters, previousPanel);
   const consistencyPlanByCharacterId = new Map(
     preview.consistencyPlan.characterPlans.map((plan) => [plan.characterId, plan])
   );

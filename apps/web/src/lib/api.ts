@@ -4,8 +4,10 @@ import type {
   ComicPanel,
   DirectorChatMessage,
   DirectorDraftResult,
+  GenerationJobRequestPayload,
   GenerationJobState,
   PromptPreview,
+  PromptPreviewRequestPayload,
   WorkflowValidationResult,
   WorkflowPreset
 } from "@archmanga/shared";
@@ -204,11 +206,7 @@ export function updateSceneMemory(
   });
 }
 
-export function createPromptPreview(payload: {
-  panel: ComicPanel;
-  workflow: WorkflowPreset | undefined;
-  characters: CharacterProfile[];
-}) {
+export function createPromptPreview(payload: PromptPreviewRequestPayload) {
   return request<PromptPreview>("/generation/prompt-preview", {
     method: "POST",
     body: JSON.stringify(payload)
@@ -253,13 +251,7 @@ export function createDirectorDraft(payload: {
   });
 }
 
-export function createGenerationJob(payload: {
-  projectId: string;
-  pageId: string;
-  panel: ComicPanel;
-  workflow: WorkflowPreset;
-  characters: CharacterProfile[];
-}) {
+export function createGenerationJob(payload: GenerationJobRequestPayload) {
   return request<{
     jobId: string;
     status: string;

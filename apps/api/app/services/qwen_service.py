@@ -25,7 +25,11 @@ class QwenPromptService:
     async def build_prompt_preview(
         self, payload: PromptPreviewRequest
     ) -> PromptPreviewResponse:
-        consistency_plan = build_panel_consistency_plan(payload.panel, payload.characters)
+        consistency_plan = build_panel_consistency_plan(
+            payload.panel,
+            payload.characters,
+            payload.previous_panel,
+        )
         fallback = self._fallback_preview(payload)
         if not self.settings.qwen_api_key:
             return fallback
@@ -42,6 +46,9 @@ class QwenPromptService:
             "revision_intent": payload.panel.prompt.revision_intent.model_dump(by_alias=True),
             "inpaint_mask": payload.panel.inpaint_mask.model_dump(by_alias=True),
             "workflow_prefix": payload.workflow.prompt_prefix if payload.workflow else "",
+            "previous_panel_snapshot": payload.previous_panel.continuity_snapshot.model_dump(by_alias=True)
+            if payload.previous_panel and payload.previous_panel.continuity_snapshot
+            else None,
             "characters": [
                 {
                     "name": character.name,
@@ -167,14 +174,24 @@ class QwenPromptService:
             return fallback
 
     def _fallback_preview(self, payload: PromptPreviewRequest) -> PromptPreviewResponse:
-        consistency_plan = build_panel_consistency_plan(payload.panel, payload.characters)
+        consistency_plan = build_panel_consistency_plan(
+            payload.panel,
+            payload.characters,
+            payload.previous_panel,
+        )
         workflow_prefix = payload.workflow.prompt_prefix if payload.workflow else ""
+        previous_snapshot = (
+            payload.previous_panel.continuity_snapshot
+            if payload.previous_panel and payload.previous_panel.continuity_snapshot
+            else None
+        )
         character_line = " | ".join(
             f"{plan.character_name}: {plan.anchor_summary}; wardrobe={plan.wardrobe_lock}"
             for plan in consistency_plan.character_plans
         )
         continuity_hints = [
             payload.panel.prompt.scene_summary or "Carry over the current scene and emotional tone.",
+            f"Previous panel lock: {previous_snapshot.continuity_summary}" if previous_snapshot else "",
             f"Shot type: {payload.panel.prompt.shot_type}"
             if payload.panel.prompt.shot_type
             else "Keep a readable manga composition.",
@@ -198,6 +215,15 @@ class QwenPromptService:
                 payload.panel.prompt.prompt,
                 f"Character anchors: {character_line}" if character_line else "",
                 (
+                    "Carry forward continuity states: "
+                    + " | ".join(
+                        f"{state.character_name} expression={state.expression or 'neutral'} wardrobe={state.wardrobe or 'same'} framing={state.framing_cue or 'same'}"
+                        for state in previous_snapshot.character_states
+                    )
+                )
+                if previous_snapshot and previous_snapshot.character_states
+                else "",
+                (
                     "Consistency locks: "
                     + " | ".join(
                         hint
@@ -219,7 +245,9 @@ class QwenPromptService:
             user_prompt=payload.panel.prompt.prompt,
             optimized_prompt=optimized_prompt,
             continuity_hints=continuity_hints,
-            scene_state=payload.panel.prompt.scene_summary or "No scene summary yet.",
+            scene_state=payload.panel.prompt.scene_summary
+            or (previous_snapshot.scene_summary if previous_snapshot else "")
+            or "No scene summary yet.",
             consistency_plan=consistency_plan,
         )
 

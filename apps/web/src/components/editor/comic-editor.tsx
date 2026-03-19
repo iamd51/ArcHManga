@@ -46,8 +46,10 @@ export function ComicEditor() {
   const selectedCharacters = selectedPanel
     ? projectCharacters.filter((character) => selectedPanel.characterIds.includes(character.id))
     : [];
+  const selectedPanelIndex = page.panels.findIndex((panel) => panel.id === selectedPanel?.id);
+  const previousPanel = selectedPanelIndex > 0 ? page.panels[selectedPanelIndex - 1] : undefined;
   const selectedPanelConsistencyPreflight = selectedPanel
-    ? getGenerationConsistencyPreflight(selectedPanel, selectedCharacters)
+    ? getGenerationConsistencyPreflight(selectedPanel, selectedCharacters, previousPanel)
     : null;
 
   const exportPage = async (format: "png" | "pdf") => {

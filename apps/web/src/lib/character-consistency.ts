@@ -23,6 +23,15 @@ function resolveReadiness(score: number): PanelConsistencyPlan["readiness"] {
   return "weak";
 }
 
+function getPreviousCharacterState(
+  previousPanel: ComicPanel | undefined,
+  characterId: string
+) {
+  return previousPanel?.continuitySnapshot?.characterStates.find(
+    (state) => state.characterId === characterId
+  );
+}
+
 function selectPreferredRoles(panel: ComicPanel) {
   const shotType = panel.prompt.shotType.toLowerCase();
   const editPriority = panel.prompt.revisionIntent.editPriority;
@@ -69,7 +78,8 @@ function scoreCharacterConsistency(panel: ComicPanel, character: CharacterProfil
 
 function selectReferenceImages(
   character: CharacterProfile,
-  preferredRoles: readonly CharacterProfile["references"][number]["role"][]
+  preferredRoles: readonly CharacterProfile["references"][number]["role"][],
+  previousState?: CharacterContinuityState
 ) {
   const roleRank = new Map(preferredRoles.map((role, index) => [role, preferredRoles.length - index]));
   const adapterRank = new Map(
@@ -78,15 +88,23 @@ function selectReferenceImages(
       character.adapter.referenceImageIds.length - index
     ])
   );
+  const continuityRank = new Map(
+    (previousState?.carriedReferenceIds ?? []).map((referenceId, index, ids) => [
+      referenceId,
+      ids.length - index
+    ])
+  );
 
   return [...character.references]
     .sort((left, right) => {
       const leftScore =
         (roleRank.get(left.role) ?? 0) * 100 +
+        (continuityRank.get(left.id) ?? 0) * 350 +
         (adapterRank.get(left.id) ?? 0) * 10 +
         (left.role === "primary" ? 1 : 0);
       const rightScore =
         (roleRank.get(right.role) ?? 0) * 100 +
+        (continuityRank.get(right.id) ?? 0) * 350 +
         (adapterRank.get(right.id) ?? 0) * 10 +
         (right.role === "primary" ? 1 : 0);
       return rightScore - leftScore;
@@ -98,7 +116,8 @@ function buildWarnings(
   panel: ComicPanel,
   character: CharacterProfile,
   preferredRoles: readonly CharacterProfile["references"][number]["role"][],
-  selectedReferences: CharacterProfile["references"]
+  selectedReferences: CharacterProfile["references"],
+  previousState?: CharacterContinuityState
 ) {
   const roles = new Set(character.references.map((reference) => reference.role));
   const warnings: string[] = [];
@@ -123,17 +142,30 @@ function buildWarnings(
   if (panel.prompt.revisionIntent.preserveCharacterIdentity && !selectedReferences.length) {
     warnings.push("Identity lock is enabled, but this panel has no active reference anchors.");
   }
+  if (
+    previousState?.carriedReferenceIds.length &&
+    !selectedReferences.some((reference) => previousState.carriedReferenceIds.includes(reference.id))
+  ) {
+    warnings.push("Previous-panel continuity anchors are available but not currently selected.");
+  }
   return warnings;
 }
 
 export function buildPanelConsistencyPlan(
   panel: ComicPanel,
-  characters: CharacterProfile[]
+  characters: CharacterProfile[],
+  previousPanel?: ComicPanel
 ): PanelConsistencyPlan {
   const characterPlans: CharacterConsistencySelection[] = characters.map((character) => {
     const preferredRoles = selectPreferredRoles(panel);
-    const selectedReferences = selectReferenceImages(character, preferredRoles);
-    const score = scoreCharacterConsistency(panel, character, selectedReferences.length);
+    const previousState = getPreviousCharacterState(previousPanel, character.id);
+    const selectedReferences = selectReferenceImages(character, preferredRoles, previousState);
+    const score = Math.min(
+      100,
+      scoreCharacterConsistency(panel, character, selectedReferences.length) +
+        (previousState ? 8 : 0) +
+        (selectedReferences.some((reference) => previousState?.carriedReferenceIds.includes(reference.id)) ? 4 : 0)
+    );
     return {
       characterId: character.id,
       characterName: character.name,
@@ -146,8 +178,10 @@ export function buildPanelConsistencyPlan(
       ]
         .filter(Boolean)
         .join("; "),
-      wardrobeLock: character.wardrobe,
-      expressionCue: character.consistency.expressionDefaults.join(", "),
+      wardrobeLock: previousState?.wardrobe || character.wardrobe,
+      expressionCue:
+        previousState?.expression ||
+        character.consistency.expressionDefaults.join(", "),
       selectedReferenceIds: selectedReferences.map((reference) => reference.id),
       selectedReferenceLabels: selectedReferences.map((reference) => reference.label),
       selectedReferenceUrls: selectedReferences.map((reference) => reference.url),
@@ -162,6 +196,18 @@ export function buildPanelConsistencyPlan(
         character.consistency.expressionDefaults.length
           ? `${character.name} expression baseline: ${character.consistency.expressionDefaults.join(", ")}.`
           : "",
+        previousState?.expression
+          ? `${character.name} carry forward expression: ${previousState.expression}.`
+          : "",
+        previousState?.wardrobe
+          ? `${character.name} carry forward wardrobe: ${previousState.wardrobe}.`
+          : "",
+        previousState?.framingCue
+          ? `${character.name} previous framing cue: ${previousState.framingCue}.`
+          : "",
+        previousState?.poseCue
+          ? `${character.name} previous pose cue: ${previousState.poseCue}.`
+          : "",
         selectedReferences.length
           ? `${character.name} selected references: ${selectedReferences.map((reference) => reference.label).join(", ")}.`
           : ""
@@ -172,7 +218,7 @@ export function buildPanelConsistencyPlan(
           : "",
         character.negativePrompt
       ].filter(Boolean),
-      warnings: buildWarnings(panel, character, preferredRoles, selectedReferences)
+      warnings: buildWarnings(panel, character, preferredRoles, selectedReferences, previousState)
     };
   });
 
@@ -194,6 +240,9 @@ export function buildPanelConsistencyPlan(
       : "No active character anchors for this panel yet.",
     globalHints: [
       characterPlans.length ? "Keep wardrobe and silhouette locked across adjacent panels." : "",
+      previousPanel?.continuitySnapshot?.characterStates.length
+        ? "Carry forward previous-panel expression, wardrobe, and framing when the same characters remain in scene."
+        : "",
       panel.prompt.revisionIntent.preserveCharacterIdentity
         ? "Prioritize face identity over style drift during redraws."
         : "",

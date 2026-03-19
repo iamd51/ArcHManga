@@ -28,9 +28,10 @@ export interface GenerationRequestTarget {
 
 export function getGenerationConsistencyPreflight(
   panel: ComicPanel,
-  characters: CharacterProfile[]
+  characters: CharacterProfile[],
+  previousPanel?: ComicPanel
 ) {
-  return buildConsistencyPreflight(buildPanelConsistencyPlan(panel, characters));
+  return buildConsistencyPreflight(buildPanelConsistencyPlan(panel, characters, previousPanel));
 }
 
 function hasActiveRevisionIntent(panel: ComicPanel) {
@@ -127,7 +128,8 @@ export function useGenerationActions() {
       return createPromptPreview({
         panel: selectedPanel,
         workflow: selectedWorkflow ?? undefined,
-        characters: attachedCharacters
+        characters: attachedCharacters,
+        previousPanel
       });
     },
     onSuccess: (preview) => setPromptPreview(preview)
@@ -143,7 +145,7 @@ export function useGenerationActions() {
       if (!panel || !workflow) {
         throw new Error("Select a panel and workflow first.");
       }
-      const consistencyPreflight = getGenerationConsistencyPreflight(panel, characters);
+      const consistencyPreflight = getGenerationConsistencyPreflight(panel, characters, previousPanel);
       if (consistencyPreflight.status === "blocked") {
         throw new Error(consistencyPreflight.reasons[0] ?? "Consistency anchors are not ready.");
       }
@@ -152,7 +154,8 @@ export function useGenerationActions() {
         pageId,
         panel,
         workflow,
-        characters
+        characters,
+        previousPanel
       });
     },
     onMutate: (target) => {

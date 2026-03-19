@@ -27,9 +27,11 @@ function buildRevisionHints(panel: ComicPanel) {
 export function buildPromptPreview(
   panel: ComicPanel,
   workflow: WorkflowPreset | undefined,
-  characters: CharacterProfile[]
+  characters: CharacterProfile[],
+  previousPanel?: ComicPanel
 ) {
-  const consistencyPlan = buildPanelConsistencyPlan(panel, characters);
+  const consistencyPlan = buildPanelConsistencyPlan(panel, characters, previousPanel);
+  const previousSnapshot = previousPanel?.continuitySnapshot;
   const characterLine = consistencyPlan.characterPlans
     .map(
       (plan) =>
@@ -39,6 +41,7 @@ export function buildPromptPreview(
 
   const continuityHints = [
     panel.prompt.sceneSummary || "Carry over location, weather, and emotional tone from prior panel.",
+    previousSnapshot?.continuitySummary ? `Previous panel lock: ${previousSnapshot.continuitySummary}` : "",
     panel.prompt.shotType ? `Preferred shot: ${panel.prompt.shotType}` : "",
     panel.prompt.styleNotes ? `Style anchor: ${panel.prompt.styleNotes}` : "",
     ...buildRevisionHints(panel),
@@ -51,6 +54,14 @@ export function buildPromptPreview(
     workflow?.promptPrefix,
     panel.prompt.prompt,
     characterLine ? `Character anchors: ${characterLine}` : "",
+    previousSnapshot?.characterStates.length
+      ? `Carry forward continuity states: ${previousSnapshot.characterStates
+          .map(
+            (state) =>
+              `${state.characterName} expression=${state.expression || "neutral"} wardrobe=${state.wardrobe || "same"} framing=${state.framingCue || "same"}`
+          )
+          .join(" | ")}`
+      : "",
     consistencyPlan.characterPlans.length
       ? `Consistency locks: ${[...consistencyPlan.globalHints, ...consistencyPlan.characterPlans.map((plan) => plan.anchorSummary)].filter(Boolean).join(" | ")}`
       : "",
@@ -64,7 +75,8 @@ export function buildPromptPreview(
     userPrompt: panel.prompt.prompt,
     optimizedPrompt,
     continuityHints,
-    sceneState: panel.prompt.sceneSummary || "No scene summary yet.",
+    sceneState:
+      panel.prompt.sceneSummary || previousSnapshot?.sceneSummary || "No scene summary yet.",
     consistencyPlan
   };
 }

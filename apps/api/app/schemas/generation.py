@@ -16,6 +16,7 @@ class PromptPreviewRequest(ApiModel):
     panel: ComicPanel
     workflow: WorkflowPreset | None = None
     characters: list[CharacterProfile] = Field(default_factory=list)
+    previous_panel: ComicPanel | None = None
 
 
 class PromptPreviewResponse(ApiModel):
@@ -105,6 +106,7 @@ class GenerationJobRequest(ApiModel):
     panel: ComicPanel
     workflow: WorkflowPreset
     characters: list[CharacterProfile] = Field(default_factory=list)
+    previous_panel: ComicPanel | None = None
 
 
 class GenerationJobResponse(ApiModel):
