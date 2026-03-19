@@ -543,6 +543,68 @@ export function Inspector({
               Keep identity
             </label>
           </div>
+          <div className="meta-row">
+            <label className="chip">
+              <input
+                type="checkbox"
+                checked={selectedPanel.prompt.revisionIntent.lockCharacterAppearance}
+                onChange={(event) =>
+                  updatePanelPrompt(selectedPanel.id, {
+                    revisionIntent: {
+                      ...selectedPanel.prompt.revisionIntent,
+                      lockCharacterAppearance: event.target.checked
+                    }
+                  })
+                }
+              />
+              Continue appearance
+            </label>
+            <label className="chip">
+              <input
+                type="checkbox"
+                checked={selectedPanel.prompt.revisionIntent.lockCharacterWardrobe}
+                onChange={(event) =>
+                  updatePanelPrompt(selectedPanel.id, {
+                    revisionIntent: {
+                      ...selectedPanel.prompt.revisionIntent,
+                      lockCharacterWardrobe: event.target.checked
+                    }
+                  })
+                }
+              />
+              Continue wardrobe
+            </label>
+            <label className="chip">
+              <input
+                type="checkbox"
+                checked={selectedPanel.prompt.revisionIntent.lockCharacterExpression}
+                onChange={(event) =>
+                  updatePanelPrompt(selectedPanel.id, {
+                    revisionIntent: {
+                      ...selectedPanel.prompt.revisionIntent,
+                      lockCharacterExpression: event.target.checked
+                    }
+                  })
+                }
+              />
+              Continue expression
+            </label>
+            <label className="chip">
+              <input
+                type="checkbox"
+                checked={selectedPanel.prompt.revisionIntent.lockCameraFraming}
+                onChange={(event) =>
+                  updatePanelPrompt(selectedPanel.id, {
+                    revisionIntent: {
+                      ...selectedPanel.prompt.revisionIntent,
+                      lockCameraFraming: event.target.checked
+                    }
+                  })
+                }
+              />
+              Continue camera
+            </label>
+          </div>
           <div className="two-column">
             <div className="stack">
               <label className="label" htmlFor="revision-priority">

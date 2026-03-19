@@ -349,6 +349,10 @@ export function buildContinuityLockSuggestion(
     revisionIntent: {
       ...panel.prompt.revisionIntent,
       preserveCharacterIdentity: true,
+      lockCharacterAppearance: true,
+      lockCharacterWardrobe: carriedStates.some((state) => Boolean(state.wardrobe)),
+      lockCharacterExpression: carriedStates.some((state) => Boolean(state.expression)),
+      lockCameraFraming: carriedStates.some((state) => Boolean(state.framingCue)),
       preserveBackground:
         panel.prompt.revisionIntent.preserveBackground || Boolean(previousSnapshot.sceneSummary),
       preserveComposition:

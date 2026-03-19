@@ -642,6 +642,22 @@ class QwenPromptService:
             token in payload.user_message or token in lowered
             for token in ["角色一致", "保留角色", "保留臉", "keep identity", "same character"]
         )
+        lock_character_appearance = base.lock_character_appearance or any(
+            token in payload.user_message or token in lowered
+            for token in ["延續外觀", "保持外觀", "appearance lock", "same appearance", "keep face"]
+        )
+        lock_character_wardrobe = base.lock_character_wardrobe or any(
+            token in payload.user_message or token in lowered
+            for token in ["延續服裝", "保持服裝", "same outfit", "keep outfit", "wardrobe lock"]
+        )
+        lock_character_expression = base.lock_character_expression or any(
+            token in payload.user_message or token in lowered
+            for token in ["延續表情", "保持表情", "same expression", "keep expression"]
+        )
+        lock_camera_framing = base.lock_camera_framing or any(
+            token in payload.user_message or token in lowered
+            for token in ["延續鏡頭", "保持鏡頭", "same shot", "keep framing", "camera lock"]
+        )
         edit_priority = base.edit_priority
         priority_map = {
             "expression": ["表情", "expression", "眼神"],
@@ -658,6 +674,10 @@ class QwenPromptService:
             preserve_composition=preserve_composition,
             preserve_background=preserve_background,
             preserve_character_identity=preserve_character_identity,
+            lock_character_appearance=lock_character_appearance,
+            lock_character_wardrobe=lock_character_wardrobe,
+            lock_character_expression=lock_character_expression,
+            lock_camera_framing=lock_camera_framing,
             edit_priority=edit_priority or "general",
             change_instructions=change_instructions,
         )
@@ -670,6 +690,14 @@ class QwenPromptService:
             hints.append("Preserve the existing background and environmental layout.")
         if revision_intent.preserve_character_identity:
             hints.append("Do not drift the active character face, silhouette, or outfit.")
+        if revision_intent.lock_character_appearance:
+            hints.append("Keep the recurring character appearance, face, and silhouette locked.")
+        if revision_intent.lock_character_wardrobe:
+            hints.append("Keep the previous wardrobe and outfit details locked.")
+        if revision_intent.lock_character_expression:
+            hints.append("Carry the previous facial expression unless a change is requested.")
+        if revision_intent.lock_camera_framing:
+            hints.append("Preserve the previous camera framing language where possible.")
         if revision_intent.edit_priority != "general":
             hints.append(f"Revision focus: {revision_intent.edit_priority}.")
         if revision_intent.change_instructions:

@@ -12,6 +12,18 @@ function buildRevisionHints(panel: ComicPanel) {
   if (panel.prompt.revisionIntent.preserveCharacterIdentity) {
     hints.push("Hold facial identity, wardrobe, and silhouette consistency.");
   }
+  if (panel.prompt.revisionIntent.lockCharacterAppearance) {
+    hints.push("Lock the recurring character appearance anchors and facial identity.");
+  }
+  if (panel.prompt.revisionIntent.lockCharacterWardrobe) {
+    hints.push("Keep outfit continuity locked to the previous successful panel.");
+  }
+  if (panel.prompt.revisionIntent.lockCharacterExpression) {
+    hints.push("Carry the previous expression unless the new beat explicitly changes it.");
+  }
+  if (panel.prompt.revisionIntent.lockCameraFraming) {
+    hints.push("Preserve the camera framing language from the previous beat when possible.");
+  }
   if (panel.prompt.revisionIntent.editPriority !== "general") {
     hints.push(`Primary revision target: ${panel.prompt.revisionIntent.editPriority}.`);
   }

@@ -135,6 +135,10 @@ export function DirectorConsole({ generationPending, onGeneratePanel }: Director
           selectedPanel.prompt.revisionIntent.preserveComposition ? "keep composition" : "",
           selectedPanel.prompt.revisionIntent.preserveBackground ? "keep background" : "",
           selectedPanel.prompt.revisionIntent.preserveCharacterIdentity ? "keep identity" : "",
+          selectedPanel.prompt.revisionIntent.lockCharacterAppearance ? "lock appearance" : "",
+          selectedPanel.prompt.revisionIntent.lockCharacterWardrobe ? "lock wardrobe" : "",
+          selectedPanel.prompt.revisionIntent.lockCharacterExpression ? "lock expression" : "",
+          selectedPanel.prompt.revisionIntent.lockCameraFraming ? "lock framing" : "",
           selectedPanel.prompt.revisionIntent.changeInstructions,
           selectedPanel.inpaintMask.enabled ? "mask active" : ""
         ]

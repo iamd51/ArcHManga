@@ -147,6 +147,10 @@ class RevisionIntent(ApiModel):
     preserve_composition: bool = False
     preserve_background: bool = False
     preserve_character_identity: bool = True
+    lock_character_appearance: bool = True
+    lock_character_wardrobe: bool = True
+    lock_character_expression: bool = False
+    lock_camera_framing: bool = False
     edit_priority: str = "general"
     change_instructions: str = ""
 

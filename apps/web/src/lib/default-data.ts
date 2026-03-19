@@ -700,6 +700,10 @@ export const defaultProject: ComicProject = {
             preserveComposition: false,
             preserveBackground: false,
             preserveCharacterIdentity: true,
+            lockCharacterAppearance: true,
+            lockCharacterWardrobe: true,
+            lockCharacterExpression: false,
+            lockCameraFraming: false,
             editPriority: "general",
             changeInstructions: ""
           }

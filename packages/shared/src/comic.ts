@@ -178,6 +178,10 @@ export interface RevisionIntent {
   preserveComposition: boolean;
   preserveBackground: boolean;
   preserveCharacterIdentity: boolean;
+  lockCharacterAppearance: boolean;
+  lockCharacterWardrobe: boolean;
+  lockCharacterExpression: boolean;
+  lockCameraFraming: boolean;
   editPriority: "general" | "expression" | "pose" | "camera" | "lighting";
   changeInstructions: string;
 }
