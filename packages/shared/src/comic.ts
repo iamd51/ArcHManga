@@ -34,7 +34,10 @@ export interface WorkflowNodeBinding {
     | "full_body_reference_image_url"
     | "outfit_reference_image_url"
     | "expression_reference_image_url"
-    | "adapter_weight";
+    | "adapter_weight"
+    | "appearance_adapter_weight"
+    | "wardrobe_adapter_weight"
+    | "expression_adapter_weight";
   provider?: "generic" | "ip-adapter" | "instantid";
   characterIndex?: number;
   label?: string;

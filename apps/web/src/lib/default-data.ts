@@ -250,7 +250,7 @@ export const defaultProject: ComicProject = {
           id: "bind-adapter-face-weight-bw",
           nodeId: "8",
           inputName: "weight",
-          source: "adapter_weight",
+          source: "expression_adapter_weight",
           provider: "ip-adapter",
           characterIndex: 0,
           label: "Face adapter weight"
@@ -268,7 +268,7 @@ export const defaultProject: ComicProject = {
           id: "bind-adapter-body-weight-bw",
           nodeId: "9",
           inputName: "weight",
-          source: "adapter_weight",
+          source: "appearance_adapter_weight",
           provider: "ip-adapter",
           characterIndex: 0,
           label: "Body adapter weight"
@@ -286,7 +286,7 @@ export const defaultProject: ComicProject = {
           id: "bind-adapter-outfit-weight-bw",
           nodeId: "10",
           inputName: "weight",
-          source: "adapter_weight",
+          source: "wardrobe_adapter_weight",
           provider: "ip-adapter",
           characterIndex: 0,
           label: "Outfit adapter weight"
@@ -339,7 +339,7 @@ export const defaultProject: ComicProject = {
           id: "bind-adapter-face-weight-color",
           nodeId: "8",
           inputName: "weight_faceidv2",
-          source: "adapter_weight",
+          source: "expression_adapter_weight",
           provider: "instantid",
           characterIndex: 0,
           label: "Face adapter weight"
@@ -357,7 +357,7 @@ export const defaultProject: ComicProject = {
           id: "bind-adapter-body-weight-color",
           nodeId: "9",
           inputName: "weight_faceidv2",
-          source: "adapter_weight",
+          source: "appearance_adapter_weight",
           provider: "instantid",
           characterIndex: 0,
           label: "Body adapter weight"
@@ -375,7 +375,7 @@ export const defaultProject: ComicProject = {
           id: "bind-adapter-outfit-weight-color",
           nodeId: "10",
           inputName: "weight_faceidv2",
-          source: "adapter_weight",
+          source: "wardrobe_adapter_weight",
           provider: "instantid",
           characterIndex: 0,
           label: "Outfit adapter weight"
@@ -428,7 +428,7 @@ export const defaultProject: ComicProject = {
           id: "bind-adapter-face-weight-bw-regen",
           nodeId: "10",
           inputName: "weight",
-          source: "adapter_weight",
+          source: "expression_adapter_weight",
           provider: "ip-adapter",
           characterIndex: 0,
           label: "Face adapter weight"
@@ -446,7 +446,7 @@ export const defaultProject: ComicProject = {
           id: "bind-adapter-body-weight-bw-regen",
           nodeId: "11",
           inputName: "weight",
-          source: "adapter_weight",
+          source: "appearance_adapter_weight",
           provider: "ip-adapter",
           characterIndex: 0,
           label: "Body adapter weight"
@@ -464,7 +464,7 @@ export const defaultProject: ComicProject = {
           id: "bind-adapter-outfit-weight-bw-regen",
           nodeId: "12",
           inputName: "weight",
-          source: "adapter_weight",
+          source: "wardrobe_adapter_weight",
           provider: "ip-adapter",
           characterIndex: 0,
           label: "Outfit adapter weight"
@@ -517,7 +517,7 @@ export const defaultProject: ComicProject = {
           id: "bind-adapter-face-weight-color-regen",
           nodeId: "10",
           inputName: "weight_faceidv2",
-          source: "adapter_weight",
+          source: "expression_adapter_weight",
           provider: "instantid",
           characterIndex: 0,
           label: "Face adapter weight"
@@ -535,7 +535,7 @@ export const defaultProject: ComicProject = {
           id: "bind-adapter-body-weight-color-regen",
           nodeId: "11",
           inputName: "weight_faceidv2",
-          source: "adapter_weight",
+          source: "appearance_adapter_weight",
           provider: "instantid",
           characterIndex: 0,
           label: "Body adapter weight"
@@ -553,7 +553,7 @@ export const defaultProject: ComicProject = {
           id: "bind-adapter-outfit-weight-color-regen",
           nodeId: "12",
           inputName: "weight_faceidv2",
-          source: "adapter_weight",
+          source: "wardrobe_adapter_weight",
           provider: "instantid",
           characterIndex: 0,
           label: "Outfit adapter weight"

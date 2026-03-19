@@ -59,6 +59,7 @@ The workspace already includes:
 - the inspector now exposes carry-forward continuity locks so you can explicitly apply previous-panel outfit, expression, and framing state before generating the next panel
 - new panels, new pages, and storyboard-applied beats now auto-seed continuity defaults from the previous beat so the first draft starts closer to a stable character state
 - panels now expose explicit continuity toggles for appearance, wardrobe, expression, and camera framing so the artist can decide exactly what should persist across beats
+- built-in workflows now map face/body/outfit adapter weights to continuity-aware sources so those panel locks affect the actual ComfyUI payload, not only the prompt text
 - FastAPI endpoints for bootstrap project data, prompt preview, generation submit, and job polling
 - a mock ComfyUI completion path so the end-to-end UX can be tested before a real worker is connected
 
@@ -94,6 +95,7 @@ The current product focus is a conversational manga-director workflow:
 - let the artist explicitly accept suggested continuity locks instead of hiding all carry-forward behavior behind automatic prompt assembly
 - automatically backfill adjacent panels with the last known stable continuity state while still letting the artist override those locks explicitly
 - keep continuity decisions legible and local to each panel instead of burying them inside only prompt text or hidden workflow state
+- make continuity locks materially influence generation strength by routing them into adapter-weight decisions and regeneration denoise policy
 
 ## Getting Started
 
@@ -161,3 +163,4 @@ Verified locally in this workspace:
 - continuity-lock suggestions can now be applied from the inspector and are also echoed into workflow `meta` for debugging downstream ComfyUI runs
 - add-panel, add-page, and storyboard flows now prefill continuity-aware prompt, scene, shot, and lock defaults before generation
 - explicit appearance/wardrobe/expression/camera toggles now flow through TypeScript models, FastAPI schemas, prompt preview, and director fallback hints
+- workflow presets and imported binding recommendations now understand continuity-aware adapter weight sources such as appearance, wardrobe, and expression strength

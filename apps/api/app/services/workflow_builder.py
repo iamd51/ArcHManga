@@ -188,6 +188,7 @@ def build_workflow_payload(
         template = deepcopy(WORKFLOW_TEMPLATES["sdxl_text2img"])
 
     consistency_plan = build_panel_consistency_plan(panel, characters, previous_panel)
+    continuity_control_values = _build_continuity_control_values(panel, consistency_plan)
     negative_prompt = _build_negative_prompt(panel, consistency_plan)
     values = {
         "model": panel.model_id,
@@ -203,6 +204,7 @@ def build_workflow_payload(
         "seed": int(panel.generation.seed),
         "source_image_url": panel.image_url,
         "mask_image_url": _build_mask_data_url(panel),
+        **continuity_control_values,
     }
     inpaint_mask = _get_inpaint_mask(panel)
     revision_intent = _get_revision_intent(panel)
@@ -245,6 +247,7 @@ def build_workflow_payload(
         "revision_intent": revision_intent.model_dump(by_alias=True),
         "inpaint_mask": inpaint_mask.model_dump(by_alias=True),
         "consistency_plan": consistency_plan.model_dump(by_alias=True),
+        "continuity_control_values": continuity_control_values,
         "consistency_adapters": [
             {
                 "character_id": character.id,
@@ -303,6 +306,20 @@ def _resolve_binding_value(
         character = _get_character(characters, character_index)
         return character.adapter.weight if character and character.adapter.enabled else None
 
+    if source in {
+        "appearance_adapter_weight",
+        "wardrobe_adapter_weight",
+        "expression_adapter_weight",
+    }:
+        character_plan = _get_character_plan(consistency_plan, character_index)
+        if not character_plan or not character_plan.adapter_enabled:
+            character = _get_character(characters, character_index)
+            base_weight = character.adapter.weight if character and character.adapter.enabled else None
+            if base_weight is None:
+                return None
+            return values.get(source, base_weight)
+        return _resolve_scoped_adapter_weight(source, character_plan.adapter_weight, values)
+
     return None
 
 
@@ -354,6 +371,12 @@ def _resolve_denoise_value(panel: ComicPanel) -> float:
         return float(panel.generation.denoise)
 
     revision_intent = _get_revision_intent(panel)
+    if revision_intent.lock_camera_framing and revision_intent.preserve_background:
+        return 0.14
+    if revision_intent.lock_camera_framing and revision_intent.preserve_composition:
+        return 0.16
+    if revision_intent.lock_camera_framing:
+        return 0.22
     if revision_intent.preserve_composition and revision_intent.preserve_background:
         return 0.18
     if revision_intent.edit_priority == "expression":
@@ -367,6 +390,37 @@ def _resolve_denoise_value(panel: ComicPanel) -> float:
     if revision_intent.preserve_character_identity:
         return 0.36
     return max(0.45, float(panel.generation.denoise))
+
+
+def _build_continuity_control_values(panel: ComicPanel, consistency_plan) -> dict[str, float]:
+    revision_intent = _get_revision_intent(panel)
+    character_plans = getattr(consistency_plan, "character_plans", [])
+    base_weight = (
+        max((plan.adapter_weight for plan in character_plans if plan.adapter_enabled), default=0.68)
+        if character_plans
+        else 0.68
+    )
+    appearance_weight = base_weight + (0.18 if revision_intent.lock_character_appearance else 0.04)
+    if revision_intent.preserve_character_identity:
+        appearance_weight += 0.06
+    wardrobe_weight = base_weight + (0.2 if revision_intent.lock_character_wardrobe else 0.02)
+    expression_weight = base_weight + (0.2 if revision_intent.lock_character_expression else 0.05)
+    if revision_intent.edit_priority == "expression":
+        expression_weight += 0.06
+    if revision_intent.edit_priority == "pose":
+        appearance_weight += 0.04
+    return {
+        "appearance_adapter_weight": round(min(1.0, appearance_weight), 3),
+        "wardrobe_adapter_weight": round(min(1.0, wardrobe_weight), 3),
+        "expression_adapter_weight": round(min(1.0, expression_weight), 3),
+    }
+
+
+def _resolve_scoped_adapter_weight(source: str, base_weight: float, values: dict) -> float:
+    scoped_weight = values.get(source)
+    if scoped_weight is None:
+        return base_weight
+    return float(scoped_weight)
 
 
 def _build_continuity_lock_summary(panel: ComicPanel, previous_panel: ComicPanel | None) -> str | None:

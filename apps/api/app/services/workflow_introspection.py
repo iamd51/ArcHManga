@@ -37,7 +37,22 @@ def guess_bindings(workflow_json: dict) -> list[WorkflowNodeBinding]:
             "expression_reference_image_url",
         ],
     }
+    adapter_weight_sequences = {
+        "ip-adapter": [
+            "expression_adapter_weight",
+            "appearance_adapter_weight",
+            "wardrobe_adapter_weight",
+            "expression_adapter_weight",
+        ],
+        "instantid": [
+            "expression_adapter_weight",
+            "appearance_adapter_weight",
+            "wardrobe_adapter_weight",
+            "expression_adapter_weight",
+        ],
+    }
     adapter_image_counts = {"ip-adapter": 0, "instantid": 0}
+    adapter_weight_counts = {"ip-adapter": 0, "instantid": 0}
     for node_id, node in workflow_json.items():
         if not isinstance(node, dict):
             continue
@@ -125,12 +140,22 @@ def guess_bindings(workflow_json: dict) -> list[WorkflowNodeBinding]:
             provider = "instantid" if "instantid" in class_type else "ip-adapter"
             for input_name in inputs:
                 if input_name in {"weight", "weight_faceidv2"}:
+                    lowered_input = input_name.lower()
+                    provider_sequence = adapter_weight_sequences.get(provider, ["adapter_weight"])
+                    sequence_index = min(
+                        adapter_weight_counts.get(provider, 0),
+                        len(provider_sequence) - 1,
+                    )
+                    source = provider_sequence[sequence_index]
+                    adapter_weight_counts[provider] = adapter_weight_counts.get(provider, 0) + 1
+                    if "face" in lowered_input or "expr" in lowered_input:
+                        source = "expression_adapter_weight"
                     bindings.append(
                         WorkflowNodeBinding(
                             id=f"{node_id}-{input_name}",
                             node_id=str(node_id),
                             input_name=input_name,
-                            source="adapter_weight",
+                            source=source,
                             provider=provider,
                             character_index=0,
                         )

@@ -118,6 +118,9 @@ def validate_workflow(
             "outfit_reference_image_url",
             "expression_reference_image_url",
             "adapter_weight",
+            "appearance_adapter_weight",
+            "wardrobe_adapter_weight",
+            "expression_adapter_weight",
         } and binding.provider:
             provider_hints = ADAPTER_PROVIDER_HINTS.get(binding.provider, ())
             normalized_node_type = (node_type or "").lower()
