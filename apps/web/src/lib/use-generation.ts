@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import type { CharacterProfile, ComicPanel, ComicProject, WorkflowPreset } from "@archmanga/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { buildConsistencyPreflight, buildPanelConsistencyPlan } from "@/lib/character-consistency";
 import {
   cancelGenerationJob,
   createContinuityDraft,
@@ -19,6 +20,13 @@ export interface GenerationRequestTarget {
   workflow?: WorkflowPreset | null;
   characters?: CharacterProfile[];
   pageId?: string;
+}
+
+export function getGenerationConsistencyPreflight(
+  panel: ComicPanel,
+  characters: CharacterProfile[]
+) {
+  return buildConsistencyPreflight(buildPanelConsistencyPlan(panel, characters));
 }
 
 function hasActiveRevisionIntent(panel: ComicPanel) {
@@ -130,6 +138,10 @@ export function useGenerationActions() {
 
       if (!panel || !workflow) {
         throw new Error("Select a panel and workflow first.");
+      }
+      const consistencyPreflight = getGenerationConsistencyPreflight(panel, characters);
+      if (consistencyPreflight.status === "blocked") {
+        throw new Error(consistencyPreflight.reasons[0] ?? "Consistency anchors are not ready.");
       }
       return createGenerationJob({
         projectId: project.id,

@@ -23,6 +23,21 @@ def detect_controls(workflow_json: dict) -> list[str]:
 
 def guess_bindings(workflow_json: dict) -> list[WorkflowNodeBinding]:
     bindings: list[WorkflowNodeBinding] = []
+    adapter_image_sequences = {
+        "ip-adapter": [
+            "face_reference_image_url",
+            "full_body_reference_image_url",
+            "outfit_reference_image_url",
+            "expression_reference_image_url",
+        ],
+        "instantid": [
+            "face_reference_image_url",
+            "full_body_reference_image_url",
+            "outfit_reference_image_url",
+            "expression_reference_image_url",
+        ],
+    }
+    adapter_image_counts = {"ip-adapter": 0, "instantid": 0}
     for node_id, node in workflow_json.items():
         if not isinstance(node, dict):
             continue
@@ -135,7 +150,13 @@ def guess_bindings(workflow_json: dict) -> list[WorkflowNodeBinding]:
                 elif "primary" in lowered_input:
                     source = "primary_reference_image_url"
                 else:
-                    source = "reference_image_url"
+                    provider_sequence = adapter_image_sequences.get(provider, ["reference_image_url"])
+                    sequence_index = min(
+                        adapter_image_counts.get(provider, 0),
+                        len(provider_sequence) - 1,
+                    )
+                    source = provider_sequence[sequence_index]
+                    adapter_image_counts[provider] = adapter_image_counts.get(provider, 0) + 1
                 bindings.append(
                     WorkflowNodeBinding(
                         id=f"{node_id}-{input_name}",

@@ -110,7 +110,15 @@ def validate_workflow(
                     )
                 )
 
-        if binding.source in {"reference_image_url", "adapter_weight"} and binding.provider:
+        if binding.source in {
+            "reference_image_url",
+            "primary_reference_image_url",
+            "face_reference_image_url",
+            "full_body_reference_image_url",
+            "outfit_reference_image_url",
+            "expression_reference_image_url",
+            "adapter_weight",
+        } and binding.provider:
             provider_hints = ADAPTER_PROVIDER_HINTS.get(binding.provider, ())
             normalized_node_type = (node_type or "").lower()
             if provider_hints and not any(hint in normalized_node_type for hint in provider_hints):

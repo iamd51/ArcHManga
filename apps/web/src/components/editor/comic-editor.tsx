@@ -6,7 +6,12 @@ import type { Stage as KonvaStage } from "konva/lib/Stage";
 import { DirectorConsole } from "@/components/editor/director-console";
 import { Inspector } from "@/components/editor/inspector";
 import { Sidebar } from "@/components/editor/sidebar";
-import { useBootstrapProject, useGenerationActions, useProjectPersistence } from "@/lib/use-generation";
+import {
+  getGenerationConsistencyPreflight,
+  useBootstrapProject,
+  useGenerationActions,
+  useProjectPersistence
+} from "@/lib/use-generation";
 import { useCurrentPage, useEditorStore } from "@/store/editor-store";
 
 const PageCanvas = dynamic(
@@ -26,6 +31,7 @@ export function ComicEditor() {
     const page = state.project.pages.find((item) => item.id === state.selectedPageId) ?? state.project.pages[0];
     return page?.panels.find((item) => item.id === state.selectedPanelId) ?? null;
   });
+  const projectCharacters = useEditorStore((state) => state.project.characters);
   const addPage = useEditorStore((state) => state.addPage);
   const duplicateCurrentPage = useEditorStore((state) => state.duplicateCurrentPage);
   const addPanel = useEditorStore((state) => state.addPanel);
@@ -37,6 +43,12 @@ export function ComicEditor() {
   const { saveProjectMutation } = useProjectPersistence();
   const { cancelGenerationMutation, continuityDraftMutation, generationMutation, promptPreviewMutation } =
     useGenerationActions();
+  const selectedCharacters = selectedPanel
+    ? projectCharacters.filter((character) => selectedPanel.characterIds.includes(character.id))
+    : [];
+  const selectedPanelConsistencyPreflight = selectedPanel
+    ? getGenerationConsistencyPreflight(selectedPanel, selectedCharacters)
+    : null;
 
   const exportPage = async (format: "png" | "pdf") => {
     setExportingFormat(format);
@@ -171,7 +183,11 @@ export function ComicEditor() {
             <button
               className="button primary"
               type="button"
-              disabled={!selectedPanel || generationMutation.isPending}
+              disabled={
+                !selectedPanel ||
+                generationMutation.isPending ||
+                selectedPanelConsistencyPreflight?.status === "blocked"
+              }
               onClick={() => {
                 startTransition(() => {
                   generationMutation.mutate(undefined);
@@ -186,6 +202,17 @@ export function ComicEditor() {
         {saveProjectMutation.error ? (
           <div className="callout callout-warning">
             Project save failed. Check that the FastAPI server is running before saving.
+          </div>
+        ) : null}
+        {generationMutation.error ? (
+          <div className="callout callout-warning">
+            {generationMutation.error.message || "Generation submit failed."}
+          </div>
+        ) : null}
+        {selectedPanelConsistencyPreflight?.status === "blocked" ? (
+          <div className="callout callout-warning">
+            Generation is blocked until character anchors are stronger:{" "}
+            {selectedPanelConsistencyPreflight.reasons.join(" ")}
           </div>
         ) : null}
 
