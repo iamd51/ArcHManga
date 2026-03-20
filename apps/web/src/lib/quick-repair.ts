@@ -21,6 +21,10 @@ export interface QuickRepairRecipe {
   maskPreset: MaskPresetId;
 }
 
+interface QuickRepairOptions {
+  targetCharacterIds?: string[];
+}
+
 export const QUICK_REPAIR_RECIPES: Record<QuickRepairRecipeId, QuickRepairRecipe> = {
   "expression-fix": {
     id: "expression-fix",
@@ -94,17 +98,23 @@ export const QUICK_REPAIR_RECIPES: Record<QuickRepairRecipeId, QuickRepairRecipe
 
 export function applyQuickRepairRecipe(
   panel: ComicPanel,
-  recipeId: QuickRepairRecipeId
+  recipeId: QuickRepairRecipeId,
+  options?: QuickRepairOptions
 ) {
   const recipe = QUICK_REPAIR_RECIPES[recipeId];
   const nextRevisionIntent = {
     ...panel.prompt.revisionIntent,
     ...recipe.revisionIntent
   };
+  const targetSlots = (options?.targetCharacterIds ?? [])
+    .map((characterId) => panel.characterIds.findIndex((candidate) => candidate === characterId))
+    .filter((slot) => slot >= 0);
   const nextInpaintMask = panel.imageUrl
     ? applyMaskPreset(panel, recipe.maskPreset, {
         shotType: panel.prompt.shotType,
-        prompt: panel.prompt.prompt
+        prompt: panel.prompt.prompt,
+        targetSlots,
+        targetCount: panel.characterIds.length
       })
     : panel.inpaintMask;
 

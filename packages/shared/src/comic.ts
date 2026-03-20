@@ -369,6 +369,7 @@ export interface DirectorDraftResult {
   panelSuggestion?: DirectorPanelSuggestion;
   sceneSuggestion?: DirectorSceneSuggestion;
   quickRepairRecipeId?: QuickRepairRecipeId;
+  repairTargetCharacterIds?: string[];
 }
 
 export interface GenerationJobState {

@@ -323,11 +323,12 @@ class QwenPromptService:
         system_prompt = (
             "You are an AI manga director. Return compact JSON with keys: "
             "assistant_message, continuity_hints, suggested_panel_count, selected_character_ids, "
-            "suggested_beats, panel_suggestion, scene_suggestion, quick_repair_recipe_id. "
+            "suggested_beats, panel_suggestion, scene_suggestion, quick_repair_recipe_id, repair_target_character_ids. "
             "Each beat should contain id, title, description, shot_type, mode, focus_character_ids. "
             "panel_suggestion should contain prompt, scene_summary, shot_type, style_notes, mode, character_ids, revision_intent. "
             "revision_intent may include character_locks so different characters can keep different continuity rules. "
             "quick_repair_recipe_id should be one of expression-fix, pose-cleanup, camera-restage, lighting-polish when the request is a local repair pass. "
+            "repair_target_character_ids should list the specific characters being repaired when the request names them. "
             "scene_suggestion should contain location, time_of_day, weather, lighting, mood, continuity_notes."
         )
         user_payload = {
@@ -429,6 +430,9 @@ class QwenPromptService:
         quick_repair_recipe_id = self._detect_quick_repair_recipe(
             payload, panel_suggestion.revision_intent
         )
+        repair_target_character_ids = self._detect_repair_target_character_ids(
+            payload, quick_repair_recipe_id, panel_suggestion.revision_intent
+        )
 
         assistant_lines = [
             f"I suggest {panel_count} panel{'s' if panel_count > 1 else ''} for this beat."
@@ -448,6 +452,15 @@ class QwenPromptService:
         if quick_repair_recipe_id:
             assistant_lines.append(
                 f"Suggested quick repair: {self._summarize_quick_repair_recipe(quick_repair_recipe_id)}."
+            )
+        if repair_target_character_ids:
+            assistant_lines.append(
+                "Repair targets: "
+                + ", ".join(
+                    self._resolve_character_name(payload, character_id)
+                    for character_id in repair_target_character_ids
+                )
+                + "."
             )
         if payload.context_summary:
             assistant_lines.append(f"Working memory: {payload.context_summary}")
@@ -469,12 +482,22 @@ class QwenPromptService:
             continuity_hints.append(
                 f"Preferred repair flow: {self._summarize_quick_repair_recipe(quick_repair_recipe_id)}."
             )
+        if repair_target_character_ids:
+            continuity_hints.append(
+                "Repair focus: "
+                + ", ".join(
+                    self._resolve_character_name(payload, character_id)
+                    for character_id in repair_target_character_ids
+                )
+                + "."
+            )
 
         return DirectorDraftResponse(
             assistant_message=" ".join(assistant_lines),
             continuity_hints=continuity_hints,
             suggested_panel_count=panel_count,
             selected_character_ids=selected_character_ids,
+            repair_target_character_ids=repair_target_character_ids,
             suggested_beats=suggested_beats,
             panel_suggestion=panel_suggestion,
             scene_suggestion=scene_suggestion,
@@ -789,6 +812,56 @@ class QwenPromptService:
             return "lighting-polish"
         return None
 
+    def _detect_repair_target_character_ids(
+        self,
+        payload: DirectorDraftRequest,
+        quick_repair_recipe_id: str | None,
+        revision_intent: RevisionIntent,
+    ) -> list[str]:
+        if not quick_repair_recipe_id:
+            return []
+
+        message = payload.user_message
+        lowered = message.lower()
+        named_targets = [
+            character.id
+            for character in payload.selected_characters or payload.available_characters
+            if character.name in message or character.name.lower() in lowered
+        ]
+        if quick_repair_recipe_id == "expression-fix":
+            expression_targets = [
+                lock.character_id
+                for lock in revision_intent.character_locks
+                if lock.lock_character_expression is False
+            ]
+            if expression_targets:
+                return expression_targets
+        if quick_repair_recipe_id == "camera-restage":
+            camera_targets = [
+                lock.character_id
+                for lock in revision_intent.character_locks
+                if lock.lock_camera_framing is False
+            ]
+            if camera_targets:
+                return camera_targets
+        if quick_repair_recipe_id == "pose-cleanup":
+            pose_targets = [
+                lock.character_id
+                for lock in revision_intent.character_locks
+                if lock.lock_character_expression is False or lock.lock_camera_framing is False
+            ]
+            if pose_targets:
+                return pose_targets
+
+        if len(named_targets) == 1:
+            return named_targets
+
+        if len(named_targets) > 1:
+            return named_targets
+        if len(payload.selected_characters) == 1:
+            return [payload.selected_characters[0].id]
+        return []
+
     def _revision_intent_hints(self, revision_intent: RevisionIntent) -> list[str]:
         hints: list[str] = []
         if revision_intent.preserve_composition:
@@ -1028,6 +1101,8 @@ class QwenPromptService:
         return any(
             token in segment or token in lowered
             for token in [
+                "只修表情",
+                "修表情",
                 "只放開表情",
                 "只改表情",
                 "只讓表情變",
@@ -1078,6 +1153,12 @@ class QwenPromptService:
             "lighting-polish": "lighting polish",
         }
         return labels.get(recipe_id, recipe_id)
+
+    def _resolve_character_name(self, payload: DirectorDraftRequest, character_id: str) -> str:
+        for character in [*payload.available_characters, *payload.selected_characters]:
+            if character.id == character_id:
+                return character.name
+        return character_id
 
     def _suggest_beat_shot(self, index: int, panel_count: int) -> str:
         if panel_count == 1:

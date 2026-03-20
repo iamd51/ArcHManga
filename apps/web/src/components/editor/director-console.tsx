@@ -84,7 +84,11 @@ function resolveSuggestedMask(panel: ReturnType<typeof useSelectedPanel>, latest
   const revisionIntent = latestDraft.panelSuggestion.revisionIntent;
   const suggestion = suggestContextualMask(panel, revisionIntent, {
     shotType: latestDraft.panelSuggestion.shotType,
-    prompt: latestDraft.panelSuggestion.prompt
+    prompt: latestDraft.panelSuggestion.prompt,
+    targetSlots: (latestDraft.repairTargetCharacterIds ?? [])
+      .map((characterId) => panel.characterIds.findIndex((candidate) => candidate === characterId))
+      .filter((slot) => slot >= 0),
+    targetCount: panel.characterIds.length
   });
   if (suggestion) {
     return suggestion.mask;
@@ -255,7 +259,9 @@ export function DirectorConsole({ generationPending, onGeneratePanel }: Director
     if (!recipeId || !baseTarget) {
       return null;
     }
-    const repaired = applyQuickRepairRecipe(baseTarget.panel, recipeId);
+    const repaired = applyQuickRepairRecipe(baseTarget.panel, recipeId, {
+      targetCharacterIds: latestDraft.repairTargetCharacterIds
+    });
     return {
       ...baseTarget,
       panel: repaired.panel,
@@ -370,6 +376,9 @@ export function DirectorConsole({ generationPending, onGeneratePanel }: Director
   const suggestedQuickRepairLabel = latestDraft?.quickRepairRecipeId
     ? QUICK_REPAIR_RECIPES[latestDraft.quickRepairRecipeId]?.label ?? latestDraft.quickRepairRecipeId
     : null;
+  const repairTargetNames = (latestDraft?.repairTargetCharacterIds ?? [])
+    .map((characterId) => project.characters.find((character) => character.id === characterId)?.name ?? characterId)
+    .filter(Boolean);
   const suggestedMaskPreset = getMaskPresetById(
     selectedPanel && latestDraft?.panelSuggestion?.revisionIntent
       ? suggestMaskPreset(selectedPanel, latestDraft.panelSuggestion.revisionIntent)
@@ -501,6 +510,9 @@ export function DirectorConsole({ generationPending, onGeneratePanel }: Director
                 ) : null}
                 {!quickRepairTarget && suggestedQuickRepairLabel ? (
                   <span className="chip active">Director repair: {suggestedQuickRepairLabel}</span>
+                ) : null}
+                {repairTargetNames.length ? (
+                  <span className="chip active">Repair target: {repairTargetNames.join(", ")}</span>
                 ) : null}
               </div>
             ) : null}

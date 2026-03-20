@@ -17,6 +17,8 @@ export interface MaskPreset {
 interface MaskPresetContext {
   shotType?: string;
   prompt?: string;
+  targetSlots?: number[];
+  targetCount?: number;
 }
 
 export const MASK_PRESETS: MaskPreset[] = [
@@ -64,6 +66,7 @@ function applyContextToMask(mask: InpaintMask, context?: MaskPresetContext): Inp
   const shotType = (context.shotType ?? "").toLowerCase();
   const prompt = (context.prompt ?? "").toLowerCase();
   let nextMask = { ...mask };
+  let hasExplicitHorizontalCue = false;
 
   if (shotType.includes("close") || shotType.includes("reaction")) {
     nextMask = {
@@ -91,6 +94,7 @@ function applyContextToMask(mask: InpaintMask, context?: MaskPresetContext): Inp
     prompt.includes("畫面左") ||
     prompt.includes("左側")
   ) {
+    hasExplicitHorizontalCue = true;
     nextMask = {
       ...nextMask,
       x: clamp(0.12, 0.04, 0.76 - nextMask.width)
@@ -101,16 +105,35 @@ function applyContextToMask(mask: InpaintMask, context?: MaskPresetContext): Inp
     prompt.includes("畫面右") ||
     prompt.includes("右側")
   ) {
+    hasExplicitHorizontalCue = true;
     nextMask = {
       ...nextMask,
       x: clamp(0.88 - nextMask.width, 0.04, 0.76)
     };
   } else if (prompt.includes("center") || prompt.includes("中央") || prompt.includes("中間")) {
+    hasExplicitHorizontalCue = true;
     nextMask = {
       ...nextMask,
       x: clamp((1 - nextMask.width) / 2, 0.04, 0.76),
       y: clamp(nextMask.y, 0.04, 0.76)
     };
+  }
+
+  if (
+    !hasExplicitHorizontalCue &&
+    context.targetSlots?.length &&
+    (context.targetCount ?? 0) > 1
+  ) {
+    const usableSlots = context.targetSlots.filter((slot) => slot >= 0);
+    if (usableSlots.length) {
+      const maxIndex = Math.max((context.targetCount ?? 1) - 1, 1);
+      const averageSlot = usableSlots.reduce((total, slot) => total + slot, 0) / usableSlots.length;
+      const horizontalRatio = averageSlot / maxIndex;
+      nextMask = {
+        ...nextMask,
+        x: clamp(0.08 + horizontalRatio * (0.84 - nextMask.width), 0.04, 0.96 - nextMask.width)
+      };
+    }
   }
 
   return nextMask;
