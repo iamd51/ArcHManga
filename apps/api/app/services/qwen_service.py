@@ -852,6 +852,9 @@ class QwenPromptService:
             ]
             if pose_targets:
                 return pose_targets
+        positional_targets = self._detect_positional_repair_targets(payload)
+        if positional_targets:
+            return positional_targets
 
         if len(named_targets) == 1:
             return named_targets
@@ -860,6 +863,62 @@ class QwenPromptService:
             return named_targets
         if len(payload.selected_characters) == 1:
             return [payload.selected_characters[0].id]
+        return []
+
+    def _detect_positional_repair_targets(self, payload: DirectorDraftRequest) -> list[str]:
+        if not payload.selected_panel or not payload.selected_panel.character_ids:
+            return []
+
+        message = payload.user_message
+        lowered = message.lower()
+        panel_character_ids = payload.selected_panel.character_ids
+
+        def has_any(tokens: list[str]) -> bool:
+            return any(token in message or token in lowered for token in tokens)
+
+        if has_any(
+            [
+                "左邊那個人",
+                "左邊的人",
+                "左邊角色",
+                "左側那個人",
+                "left-side character",
+                "left person",
+                "left one",
+            ]
+        ):
+            return [panel_character_ids[0]]
+        if has_any(
+            [
+                "右邊那個人",
+                "右邊的人",
+                "右邊角色",
+                "右側那個人",
+                "right-side character",
+                "right person",
+                "right one",
+            ]
+        ):
+            return [panel_character_ids[-1]]
+        if has_any(
+            [
+                "中間那個人",
+                "中間的人",
+                "中央角色",
+                "middle character",
+                "center character",
+            ]
+        ):
+            return [panel_character_ids[len(panel_character_ids) // 2]]
+
+        ordinal_map = {
+            0: ["第一個人", "第一個角色", "第一位", "first character", "first one"],
+            1: ["第二個人", "第二個角色", "第二位", "second character", "second one"],
+            2: ["第三個人", "第三個角色", "第三位", "third character", "third one"],
+        }
+        for index, tokens in ordinal_map.items():
+            if index < len(panel_character_ids) and has_any(tokens):
+                return [panel_character_ids[index]]
         return []
 
     def _revision_intent_hints(self, revision_intent: RevisionIntent) -> list[str]:
@@ -962,7 +1021,21 @@ class QwenPromptService:
                 ("lock_character_expression", ["表情可以改", "change expression", "expression can change"]),
                 ("lock_character_wardrobe", ["服裝可以改", "change outfit", "outfit can change"]),
                 ("lock_character_appearance", ["外觀可以改", "change appearance", "appearance can change"]),
-                ("lock_camera_framing", ["鏡頭可以改", "change framing", "camera can change"]),
+                (
+                    "lock_camera_framing",
+                    [
+                        "鏡頭可以改",
+                        "change framing",
+                        "camera can change",
+                        "改鏡頭",
+                        "重拉鏡頭",
+                        "拉遠鏡頭",
+                        "拉近鏡頭",
+                        "改構圖",
+                        "camera restage",
+                        "restage camera",
+                    ],
+                ),
             ]
             for field_name, tokens in positive_specs:
                 if any(
@@ -985,6 +1058,14 @@ class QwenPromptService:
                 lock.lock_character_appearance = True
                 lock.lock_character_wardrobe = True
                 lock.lock_character_expression = False
+            if self._segment_requests_camera_change(segment):
+                lock.preserve_character_identity = True
+                lock.lock_character_appearance = True
+                lock.lock_camera_framing = False
+            if self._character_clause_requests_camera_change(user_message, character.name):
+                lock.preserve_character_identity = True
+                lock.lock_character_appearance = True
+                lock.lock_camera_framing = False
             if self._segment_requests_only_camera_hold(segment):
                 lock.preserve_character_identity = True
                 lock.lock_character_appearance = True
@@ -1118,6 +1199,43 @@ class QwenPromptService:
             token in segment or token in lowered
             for token in ["鏡頭不變", "鏡頭維持一樣", "保持鏡頭", "same shot", "keep framing"]
         )
+
+    def _segment_requests_camera_change(self, segment: str) -> bool:
+        lowered = segment.lower()
+        return any(
+            token in segment or token in lowered
+            for token in [
+                "改鏡頭",
+                "重拉鏡頭",
+                "鏡頭可以改",
+                "拉遠鏡頭",
+                "拉近鏡頭",
+                "改構圖",
+                "camera restage",
+                "restage camera",
+            ]
+        )
+
+    def _character_clause_requests_camera_change(
+        self, user_message: str, character_name: str
+    ) -> bool:
+        clauses = [clause.strip() for clause in re.split(r"[，,；;。.!?]", user_message) if clause.strip()]
+        character_lowered = character_name.lower()
+        camera_change_tokens = [
+            "改鏡頭",
+            "重拉",
+            "拉遠",
+            "拉近",
+            "構圖",
+            "camera restage",
+            "restage camera",
+        ]
+        for clause in clauses:
+            lowered_clause = clause.lower()
+            if character_name in clause or character_lowered in lowered_clause:
+                if any(token in clause or token in lowered_clause for token in camera_change_tokens):
+                    return True
+        return False
 
     def _build_character_lock_note(self, character_name: str, preset_name: str | None) -> str:
         if preset_name == "full-lock":

@@ -69,6 +69,7 @@ The workspace already includes:
 - those repair actions now also offer immediate regenerate shortcuts, making the shortest local-redraw path closer to one click after selecting the panel
 - director drafts now emit an explicit quick-repair recipe so natural requests like expression fixes or camera restaging can jump straight into the matching regeneration flow
 - director quick-repair drafts can now also name repair targets, and the suggested mask will bias toward the intended character in multi-character panels
+- director repair targeting also understands positional phrasing such as left-side or right-side character cues when the user does not name the character directly
 - FastAPI endpoints for bootstrap project data, prompt preview, generation submit, and job polling
 - a mock ComfyUI completion path so the end-to-end UX can be tested before a real worker is connected
 
@@ -169,6 +170,7 @@ Verified locally in this workspace:
 - director draft requests with structured continuity memory via `TestClient`
 - director draft quick-repair recipe detection for natural repair phrasing via `TestClient`
 - director quick-repair target detection for named characters via `TestClient`
+- director quick-repair target detection for positional character phrasing via `TestClient`
 - revision-intent prompt preview and director parsing checks via `TestClient`
 - workflow regeneration bindings for `source_image_url` and computed `denoise` via Python checks
 - bootstrap migration checks for newly added regeneration presets via `TestClient`

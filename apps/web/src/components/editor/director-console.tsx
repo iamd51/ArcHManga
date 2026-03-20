@@ -407,7 +407,7 @@ export function DirectorConsole({ generationPending, onGeneratePanel }: Director
           className="textarea compact"
           value={input}
           onChange={(event) => setInput(event.target.value)}
-          placeholder="Example: Rin 全鎖，Kai 只放開表情，鏡頭不變。或是幫我把這段劇情拆成 4 格。"
+          placeholder="Example: Rin 全鎖，Kai 只放開表情，鏡頭不變。或是只修右邊那個人表情、保留背景。"
         />
         <div className="toolbar-actions">
           <button
