@@ -323,10 +323,11 @@ class QwenPromptService:
         system_prompt = (
             "You are an AI manga director. Return compact JSON with keys: "
             "assistant_message, continuity_hints, suggested_panel_count, selected_character_ids, "
-            "suggested_beats, panel_suggestion, scene_suggestion. "
+            "suggested_beats, panel_suggestion, scene_suggestion, quick_repair_recipe_id. "
             "Each beat should contain id, title, description, shot_type, mode, focus_character_ids. "
             "panel_suggestion should contain prompt, scene_summary, shot_type, style_notes, mode, character_ids, revision_intent. "
             "revision_intent may include character_locks so different characters can keep different continuity rules. "
+            "quick_repair_recipe_id should be one of expression-fix, pose-cleanup, camera-restage, lighting-polish when the request is a local repair pass. "
             "scene_suggestion should contain location, time_of_day, weather, lighting, mood, continuity_notes."
         )
         user_payload = {
@@ -425,6 +426,9 @@ class QwenPromptService:
         panel_suggestion = self._build_panel_suggestion(
             payload, mode, shot_type, style_notes, selected_character_ids
         )
+        quick_repair_recipe_id = self._detect_quick_repair_recipe(
+            payload, panel_suggestion.revision_intent
+        )
 
         assistant_lines = [
             f"I suggest {panel_count} panel{'s' if panel_count > 1 else ''} for this beat."
@@ -440,6 +444,10 @@ class QwenPromptService:
                     self._summarize_character_lock_for_director(lock)
                     for lock in panel_suggestion.revision_intent.character_locks
                 )
+            )
+        if quick_repair_recipe_id:
+            assistant_lines.append(
+                f"Suggested quick repair: {self._summarize_quick_repair_recipe(quick_repair_recipe_id)}."
             )
         if payload.context_summary:
             assistant_lines.append(f"Working memory: {payload.context_summary}")
@@ -457,6 +465,10 @@ class QwenPromptService:
             continuity_hints.append(payload.context_summary)
         if panel_suggestion.revision_intent:
             continuity_hints.extend(self._revision_intent_hints(panel_suggestion.revision_intent))
+        if quick_repair_recipe_id:
+            continuity_hints.append(
+                f"Preferred repair flow: {self._summarize_quick_repair_recipe(quick_repair_recipe_id)}."
+            )
 
         return DirectorDraftResponse(
             assistant_message=" ".join(assistant_lines),
@@ -466,6 +478,7 @@ class QwenPromptService:
             suggested_beats=suggested_beats,
             panel_suggestion=panel_suggestion,
             scene_suggestion=scene_suggestion,
+            quick_repair_recipe_id=quick_repair_recipe_id,
         )
 
     def _detect_panel_count(self, user_message: str) -> int | None:
@@ -720,6 +733,61 @@ class QwenPromptService:
             change_instructions=change_instructions,
             character_locks=character_locks,
         )
+
+    def _detect_quick_repair_recipe(
+        self, payload: DirectorDraftRequest, revision_intent: RevisionIntent
+    ) -> str | None:
+        message = payload.user_message
+        lowered = message.lower()
+        explicit_map = {
+            "expression-fix": [
+                "只修表情",
+                "修表情",
+                "表情修一下",
+                "修臉",
+                "修眼神",
+                "expression fix",
+                "face fix",
+            ],
+            "pose-cleanup": [
+                "修姿勢",
+                "改姿勢",
+                "姿勢修一下",
+                "修動作",
+                "pose cleanup",
+                "pose fix",
+            ],
+            "camera-restage": [
+                "改鏡頭",
+                "重拉鏡頭",
+                "拉遠鏡頭",
+                "拉近鏡頭",
+                "改構圖",
+                "camera restage",
+                "restage camera",
+            ],
+            "lighting-polish": [
+                "修光",
+                "修光線",
+                "修光影",
+                "調光線",
+                "lighting polish",
+                "light pass",
+            ],
+        }
+        for recipe_id, tokens in explicit_map.items():
+            if any(token in message or token in lowered for token in tokens):
+                return recipe_id
+
+        if revision_intent.edit_priority == "expression":
+            return "expression-fix"
+        if revision_intent.edit_priority == "pose":
+            return "pose-cleanup"
+        if revision_intent.edit_priority == "camera":
+            return "camera-restage"
+        if revision_intent.edit_priority == "lighting":
+            return "lighting-polish"
+        return None
 
     def _revision_intent_hints(self, revision_intent: RevisionIntent) -> list[str]:
         hints: list[str] = []
@@ -1001,6 +1069,15 @@ class QwenPromptService:
         ]
         summary = ", ".join(label for label in labels if label)
         return f"{character_lock.character_id}: {summary or 'custom override'}"
+
+    def _summarize_quick_repair_recipe(self, recipe_id: str) -> str:
+        labels = {
+            "expression-fix": "expression fix",
+            "pose-cleanup": "pose cleanup",
+            "camera-restage": "camera restage",
+            "lighting-polish": "lighting polish",
+        }
+        return labels.get(recipe_id, recipe_id)
 
     def _suggest_beat_shot(self, index: int, panel_count: int) -> str:
         if panel_count == 1:

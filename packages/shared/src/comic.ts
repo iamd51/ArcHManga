@@ -2,6 +2,12 @@ export type GenerationMode = "bw" | "color";
 
 export type ModelKind = "checkpoint" | "lora" | "controlnet" | "embedding";
 
+export type QuickRepairRecipeId =
+  | "expression-fix"
+  | "pose-cleanup"
+  | "camera-restage"
+  | "lighting-polish";
+
 export interface WorkflowParameter {
   key: string;
   label: string;
@@ -362,6 +368,7 @@ export interface DirectorDraftResult {
   suggestedBeats: DirectorBeat[];
   panelSuggestion?: DirectorPanelSuggestion;
   sceneSuggestion?: DirectorSceneSuggestion;
+  quickRepairRecipeId?: QuickRepairRecipeId;
 }
 
 export interface GenerationJobState {

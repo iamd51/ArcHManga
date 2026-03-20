@@ -232,7 +232,7 @@ export function ComicEditor() {
         <PageCanvas stageRef={stageRef} renderMode={renderMode} />
       </section>
       <Inspector
-        onGenerate={() => generationMutation.mutate(undefined)}
+        onGenerate={(target) => generationMutation.mutate(target)}
         onContinuityDraft={() => continuityDraftMutation.mutate()}
         onPreviewPrompt={() => promptPreviewMutation.mutate()}
         generationPending={generationMutation.isPending}

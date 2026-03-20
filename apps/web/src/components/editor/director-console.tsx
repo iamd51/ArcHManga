@@ -6,6 +6,11 @@ import type { ComicProject, DirectorChatMessage, DirectorDraftResult } from "@ar
 import { createDirectorDraft } from "@/lib/api";
 import { buildPanelConsistencyPlan } from "@/lib/character-consistency";
 import { getMaskPresetById, suggestContextualMask, suggestMaskPreset } from "@/lib/mask-presets";
+import {
+  applyQuickRepairRecipe,
+  inferQuickRepairRecipe,
+  QUICK_REPAIR_RECIPES
+} from "@/lib/quick-repair";
 import { resolveGenerationWorkflow, type GenerationRequestTarget } from "@/lib/use-generation";
 import { useCurrentPage, useEditorStore, useSelectedPanel } from "@/store/editor-store";
 
@@ -239,6 +244,25 @@ export function DirectorConsole({ generationPending, onGeneratePanel }: Director
     };
   };
 
+  const buildQuickRepairTarget = () => {
+    if (!selectedPanel?.imageUrl || !latestDraft?.panelSuggestion?.revisionIntent) {
+      return null;
+    }
+    const recipeId =
+      latestDraft.quickRepairRecipeId ??
+      inferQuickRepairRecipe(latestDraft.panelSuggestion.revisionIntent);
+    const baseTarget = buildSuggestedPanelTarget();
+    if (!recipeId || !baseTarget) {
+      return null;
+    }
+    const repaired = applyQuickRepairRecipe(baseTarget.panel, recipeId);
+    return {
+      ...baseTarget,
+      panel: repaired.panel,
+      recipe: repaired.recipe
+    };
+  };
+
   const syncSceneSuggestion = () => {
     if (selectedPanel?.sceneMemoryId && latestDraft?.sceneSuggestion) {
       updateSceneMemory(selectedPanel.sceneMemoryId, {
@@ -293,6 +317,37 @@ export function DirectorConsole({ generationPending, onGeneratePanel }: Director
     });
   };
 
+  const generateRepairFromDraft = () => {
+    const target = buildQuickRepairTarget();
+    if (!target || !selectedPanel) {
+      return;
+    }
+
+    updatePanelPrompt(selectedPanel.id, {
+      prompt: target.panel.prompt.prompt,
+      sceneSummary: target.panel.prompt.sceneSummary,
+      shotType: target.panel.prompt.shotType,
+      styleNotes: target.panel.prompt.styleNotes,
+      revisionIntent: target.panel.prompt.revisionIntent
+    });
+    updatePanelMeta(selectedPanel.id, {
+      mode: target.panel.mode,
+      modelId: target.panel.modelId,
+      workflowPresetId: target.panel.workflowPresetId,
+      characterIds: target.panel.characterIds
+    });
+    updatePanelInpaintMask(selectedPanel.id, target.panel.inpaintMask);
+    syncSceneSuggestion();
+    startTransition(() => {
+      onGeneratePanel({
+        panel: target.panel,
+        workflow: target.workflow,
+        characters: target.characters,
+        pageId: currentPage.id
+      });
+    });
+  };
+
   const applyStoryboard = () => {
     if (!latestDraft?.suggestedBeats.length) {
       return;
@@ -311,6 +366,10 @@ export function DirectorConsole({ generationPending, onGeneratePanel }: Director
   const canApplyPanelDraft = Boolean(selectedPanel && latestDraft?.panelSuggestion);
   const canGeneratePanelDraft =
     canApplyPanelDraft && Boolean(buildSuggestedPanelTarget()?.workflow) && !generationPending;
+  const quickRepairTarget = buildQuickRepairTarget();
+  const suggestedQuickRepairLabel = latestDraft?.quickRepairRecipeId
+    ? QUICK_REPAIR_RECIPES[latestDraft.quickRepairRecipeId]?.label ?? latestDraft.quickRepairRecipeId
+    : null;
   const suggestedMaskPreset = getMaskPresetById(
     selectedPanel && latestDraft?.panelSuggestion?.revisionIntent
       ? suggestMaskPreset(selectedPanel, latestDraft.panelSuggestion.revisionIntent)
@@ -365,6 +424,14 @@ export function DirectorConsole({ generationPending, onGeneratePanel }: Director
             onClick={generateFromDraft}
           >
             {generationPending ? "Generating..." : "Apply + generate panel"}
+          </button>
+          <button
+            className="button primary"
+            type="button"
+            disabled={!quickRepairTarget || generationPending}
+            onClick={generateRepairFromDraft}
+          >
+            {generationPending ? "Generating..." : quickRepairTarget?.recipe.ctaLabel ?? "Repair + generate"}
           </button>
           <button
             className="button"
@@ -428,6 +495,12 @@ export function DirectorConsole({ generationPending, onGeneratePanel }: Director
                 })}
                 {suggestedMaskPreset ? (
                   <span className="chip active">Mask template: {suggestedMaskPreset.label}</span>
+                ) : null}
+                {quickRepairTarget ? (
+                  <span className="chip active">Quick repair: {quickRepairTarget.recipe.label}</span>
+                ) : null}
+                {!quickRepairTarget && suggestedQuickRepairLabel ? (
+                  <span className="chip active">Director repair: {suggestedQuickRepairLabel}</span>
                 ) : null}
               </div>
             ) : null}

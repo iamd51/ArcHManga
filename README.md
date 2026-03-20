@@ -65,6 +65,9 @@ The workspace already includes:
 - continuity suggestions and new-panel defaults now carry forward those character-specific overrides into add-panel, add-page, and storyboard flows
 - inspector character cards now include one-click continuity presets such as full lock, allow expression, keep look plus outfit, and identity plus camera
 - director fallback parsing now understands more natural multi-character commands such as full lock, allow-expression-only, and camera-stays-fixed phrasing
+- inspector now exposes one-tap repair actions for expression, pose, camera, and lighting passes so local redraw setup does not require toggling every control manually
+- those repair actions now also offer immediate regenerate shortcuts, making the shortest local-redraw path closer to one click after selecting the panel
+- director drafts now emit an explicit quick-repair recipe so natural requests like expression fixes or camera restaging can jump straight into the matching regeneration flow
 - FastAPI endpoints for bootstrap project data, prompt preview, generation submit, and job polling
 - a mock ComfyUI completion path so the end-to-end UX can be tested before a real worker is connected
 
@@ -163,6 +166,7 @@ Verified locally in this workspace:
 - full project persistence roundtrip via `PUT /api/projects/{projectId}` and `storage/project.json`
 - character reference upload, metadata patch, and delete flow via `TestClient`
 - director draft requests with structured continuity memory via `TestClient`
+- director draft quick-repair recipe detection for natural repair phrasing via `TestClient`
 - revision-intent prompt preview and director parsing checks via `TestClient`
 - workflow regeneration bindings for `source_image_url` and computed `denoise` via Python checks
 - bootstrap migration checks for newly added regeneration presets via `TestClient`

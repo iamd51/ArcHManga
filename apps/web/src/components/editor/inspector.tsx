@@ -1,5 +1,6 @@
 "use client";
 
+import { startTransition } from "react";
 import Image from "next/image";
 import { useMutation } from "@tanstack/react-query";
 import {
@@ -7,6 +8,11 @@ import {
   buildContinuityLockSuggestion
 } from "@/lib/character-consistency";
 import { MASK_PRESETS, applyMaskPreset } from "@/lib/mask-presets";
+import {
+  applyQuickRepairRecipe,
+  QUICK_REPAIR_RECIPES,
+  type QuickRepairRecipeId
+} from "@/lib/quick-repair";
 import {
   deleteCharacterReference,
   updateCharacterReference as updateCharacterReferenceRequest,
@@ -16,6 +22,7 @@ import {
   uploadCharacterReference
 } from "@/lib/api";
 import { buildPromptPreview } from "@/lib/prompt-preview";
+import { resolveGenerationWorkflow, type GenerationRequestTarget } from "@/lib/use-generation";
 import {
   getModeLabel,
   useEditorStore,
@@ -24,7 +31,7 @@ import {
 } from "@/store/editor-store";
 
 interface InspectorProps {
-  onGenerate: () => void;
+  onGenerate: (target?: GenerationRequestTarget) => void;
   onContinuityDraft: () => void;
   onPreviewPrompt: () => void;
   generationPending: boolean;
@@ -321,6 +328,32 @@ export function Inspector({
     >;
     upsertCharacterLock(characterId, presetMap[preset]);
   };
+  const applyQuickRevisionAction = (
+    recipeId: QuickRepairRecipeId,
+    options?: { generateAfterApply?: boolean }
+  ) => {
+    const nextPanel = applyQuickRepairRecipe(selectedPanel, recipeId).panel;
+    updatePanelPrompt(selectedPanel.id, {
+      revisionIntent: nextPanel.prompt.revisionIntent
+    });
+    if (selectedPanel.imageUrl && nextPanel.inpaintMask !== selectedPanel.inpaintMask) {
+      updatePanelInpaintMask(selectedPanel.id, nextPanel.inpaintMask);
+    }
+    if (options?.generateAfterApply) {
+      const workflow = resolveGenerationWorkflow(project, nextPanel, selectedWorkflow ?? undefined);
+      const characters = project.characters.filter((character) =>
+        nextPanel.characterIds.includes(character.id)
+      );
+      startTransition(() => {
+        onGenerate({
+          panel: nextPanel,
+          workflow,
+          characters,
+          pageId: selectedPage.id
+        });
+      });
+    }
+  };
 
   return (
     <aside className="surface inspector">
@@ -354,7 +387,7 @@ export function Inspector({
             className="button primary"
             type="button"
             disabled={generationPending}
-            onClick={onGenerate}
+            onClick={() => onGenerate()}
           >
             {generationPending ? "Submitting..." : "Generate this panel"}
           </button>
@@ -740,6 +773,46 @@ export function Inspector({
             }
             placeholder="Example: keep the framing, only change Rin to a startled expression."
           />
+        </div>
+
+        <div className="stack">
+          <label className="label">Quick Repair Actions</label>
+          <div className="meta-row">
+            {(Object.values(QUICK_REPAIR_RECIPES) as Array<(typeof QUICK_REPAIR_RECIPES)[QuickRepairRecipeId]>).map(
+              (recipe) => (
+                <button
+                  key={recipe.id}
+                  className="button subtle"
+                  type="button"
+                  onClick={() => applyQuickRevisionAction(recipe.id)}
+                >
+                  {recipe.label}
+                </button>
+              )
+            )}
+          </div>
+          {selectedPanel.imageUrl ? (
+            <div className="meta-row">
+              {(Object.values(QUICK_REPAIR_RECIPES) as Array<(typeof QUICK_REPAIR_RECIPES)[QuickRepairRecipeId]>).map(
+                (recipe) => (
+                  <button
+                    key={`${recipe.id}-generate`}
+                    className="button primary"
+                    type="button"
+                    disabled={generationPending}
+                    onClick={() => applyQuickRevisionAction(recipe.id, { generateAfterApply: true })}
+                  >
+                    {recipe.ctaLabel}
+                  </button>
+                )
+              )}
+            </div>
+          ) : null}
+          <div className="hint-box">
+            One tap sets a sensible revision intent and, when a render already exists, also prepares a
+            matching inpaint mask. The generate shortcuts immediately send the updated panel back through
+            the regeneration flow.
+          </div>
         </div>
 
         <div className="stack">

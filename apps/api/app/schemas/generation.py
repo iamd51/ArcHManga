@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import Field
 
 from app.schemas.comic import (
@@ -98,6 +100,15 @@ class DirectorDraftResponse(ApiModel):
     suggested_beats: list[DirectorBeat] = Field(default_factory=list)
     panel_suggestion: DirectorPanelSuggestion | None = None
     scene_suggestion: DirectorSceneSuggestion | None = None
+    quick_repair_recipe_id: (
+        Literal[
+            "expression-fix",
+            "pose-cleanup",
+            "camera-restage",
+            "lighting-polish",
+        ]
+        | None
+    ) = None
 
 
 class GenerationJobRequest(ApiModel):
