@@ -410,7 +410,7 @@ export function DirectorConsole({ generationPending, onGeneratePanel }: Director
           className="textarea compact"
           value={input}
           onChange={(event) => setInput(event.target.value)}
-          placeholder="Example: 別動左邊那個，只把右邊那個拉成特寫。或是只修前景那個人表情、保留背景。"
+          placeholder="Example: 別動左邊那個，只把右邊那個拉成反應特寫。或是讓右邊那個進畫面、保留背景。"
         />
         <div className="toolbar-actions">
           <button

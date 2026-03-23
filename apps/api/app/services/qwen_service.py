@@ -743,7 +743,7 @@ class QwenPromptService:
         edit_priority = base.edit_priority
         priority_map = {
             "expression": ["表情", "expression", "眼神"],
-            "pose": ["姿勢", "pose", "動作"],
+            "pose": ["姿勢", "pose", "動作", "進畫面", "進入畫面", "enter frame", "come into frame"],
             "camera": ["鏡頭", "構圖", "camera", "shot", "拉遠", "拉近", "特寫", "close-up", "close up"],
             "lighting": ["光線", "lighting", "光影"],
         }
@@ -786,6 +786,10 @@ class QwenPromptService:
                 "改姿勢",
                 "姿勢修一下",
                 "修動作",
+                "進畫面",
+                "進入畫面",
+                "enter frame",
+                "come into frame",
                 "pose cleanup",
                 "pose fix",
             ],
@@ -795,6 +799,7 @@ class QwenPromptService:
                 "拉遠鏡頭",
                 "拉近鏡頭",
                 "拉成特寫",
+                "反應特寫",
                 "特寫",
                 "改構圖",
                 "close-up",
@@ -891,7 +896,11 @@ class QwenPromptService:
                 continue
             if self._clause_requests_full_lock(clause):
                 continue
-            if self._segment_requests_only_expression_change(clause) or self._segment_requests_camera_change(clause):
+            if (
+                self._segment_requests_only_expression_change(clause)
+                or self._segment_requests_camera_change(clause)
+                or self._segment_requests_pose_change(clause)
+            ):
                 return target_ids
         return []
 
@@ -1117,6 +1126,11 @@ class QwenPromptService:
                     lock.lock_character_wardrobe = True
                     lock.lock_character_expression = False
                     lock.note = "Director positional lock: expression can change."
+                if self._segment_requests_pose_change(clause):
+                    lock.preserve_character_identity = True
+                    lock.lock_character_appearance = True
+                    lock.lock_character_wardrobe = True
+                    lock.note = "Director positional lock: staging or pose can change."
                 if self._segment_requests_camera_change(clause):
                     lock.preserve_character_identity = True
                     lock.lock_character_appearance = True
@@ -1274,6 +1288,22 @@ class QwenPromptService:
             ]
         )
 
+    def _segment_requests_pose_change(self, segment: str) -> bool:
+        lowered = segment.lower()
+        return any(
+            token in segment or token in lowered
+            for token in [
+                "進畫面",
+                "進入畫面",
+                "走進畫面",
+                "move into frame",
+                "enter frame",
+                "come into frame",
+                "pose cleanup",
+                "pose fix",
+            ]
+        )
+
     def _segment_requests_only_camera_hold(self, segment: str) -> bool:
         lowered = segment.lower()
         return any(
@@ -1304,6 +1334,7 @@ class QwenPromptService:
                 "改鏡頭",
                 "重拉鏡頭",
                 "拉成特寫",
+                "反應特寫",
                 "特寫",
                 "鏡頭可以改",
                 "拉遠鏡頭",
