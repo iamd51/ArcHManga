@@ -71,6 +71,7 @@ The workspace already includes:
 - director quick-repair drafts can now also name repair targets, and the suggested mask will bias toward the intended character in multi-character panels
 - director repair targeting also understands positional phrasing such as left-side or right-side character cues when the user does not name the character directly
 - director repair targeting now also carries frame cues such as foreground or background so mask suggestions can bias vertically even when no explicit character name is available
+- director now understands keep-this-one / change-that-one phrasing for positional characters, so left/right or first/second clauses can become separate continuity locks and repair targets in the same request
 - FastAPI endpoints for bootstrap project data, prompt preview, generation submit, and job polling
 - a mock ComfyUI completion path so the end-to-end UX can be tested before a real worker is connected
 
@@ -173,6 +174,7 @@ Verified locally in this workspace:
 - director quick-repair target detection for named characters via `TestClient`
 - director quick-repair target detection for positional character phrasing via `TestClient`
 - director quick-repair frame-cue detection for foreground/background phrasing via `TestClient`
+- director positional keep-vs-change phrasing via `TestClient`
 - revision-intent prompt preview and director parsing checks via `TestClient`
 - workflow regeneration bindings for `source_image_url` and computed `denoise` via Python checks
 - bootstrap migration checks for newly added regeneration presets via `TestClient`

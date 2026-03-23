@@ -435,6 +435,8 @@ class QwenPromptService:
         repair_target_character_ids = self._detect_repair_target_character_ids(
             payload, quick_repair_recipe_id, panel_suggestion.revision_intent
         )
+        if repair_target_character_ids:
+            repair_target_frame_cue = None
 
         assistant_lines = [
             f"I suggest {panel_count} panel{'s' if panel_count > 1 else ''} for this beat."
@@ -742,7 +744,7 @@ class QwenPromptService:
         priority_map = {
             "expression": ["表情", "expression", "眼神"],
             "pose": ["姿勢", "pose", "動作"],
-            "camera": ["鏡頭", "構圖", "camera", "shot", "拉遠", "拉近"],
+            "camera": ["鏡頭", "構圖", "camera", "shot", "拉遠", "拉近", "特寫", "close-up", "close up"],
             "lighting": ["光線", "lighting", "光影"],
         }
         for candidate, tokens in priority_map.items():
@@ -792,7 +794,11 @@ class QwenPromptService:
                 "重拉鏡頭",
                 "拉遠鏡頭",
                 "拉近鏡頭",
+                "拉成特寫",
+                "特寫",
                 "改構圖",
+                "close-up",
+                "close up",
                 "camera restage",
                 "restage camera",
             ],
@@ -876,56 +882,17 @@ class QwenPromptService:
         if not payload.selected_panel or not payload.selected_panel.character_ids:
             return []
 
-        message = payload.user_message
-        lowered = message.lower()
         panel_character_ids = payload.selected_panel.character_ids
+        clauses = [clause.strip() for clause in re.split(r"[，,；;。.!?]", payload.user_message) if clause.strip()]
 
-        def has_any(tokens: list[str]) -> bool:
-            return any(token in message or token in lowered for token in tokens)
-
-        if has_any(
-            [
-                "左邊那個人",
-                "左邊的人",
-                "左邊角色",
-                "左側那個人",
-                "left-side character",
-                "left person",
-                "left one",
-            ]
-        ):
-            return [panel_character_ids[0]]
-        if has_any(
-            [
-                "右邊那個人",
-                "右邊的人",
-                "右邊角色",
-                "右側那個人",
-                "right-side character",
-                "right person",
-                "right one",
-            ]
-        ):
-            return [panel_character_ids[-1]]
-        if has_any(
-            [
-                "中間那個人",
-                "中間的人",
-                "中央角色",
-                "middle character",
-                "center character",
-            ]
-        ):
-            return [panel_character_ids[len(panel_character_ids) // 2]]
-
-        ordinal_map = {
-            0: ["第一個人", "第一個角色", "第一位", "first character", "first one"],
-            1: ["第二個人", "第二個角色", "第二位", "second character", "second one"],
-            2: ["第三個人", "第三個角色", "第三位", "third character", "third one"],
-        }
-        for index, tokens in ordinal_map.items():
-            if index < len(panel_character_ids) and has_any(tokens):
-                return [panel_character_ids[index]]
+        for clause in clauses:
+            target_ids = self._resolve_clause_character_ids(panel_character_ids, clause)
+            if not target_ids:
+                continue
+            if self._clause_requests_full_lock(clause):
+                continue
+            if self._segment_requests_only_expression_change(clause) or self._segment_requests_camera_change(clause):
+                return target_ids
         return []
 
     def _detect_repair_target_frame_cue(
@@ -935,6 +902,7 @@ class QwenPromptService:
         lowered = message.lower()
         cue_map = {
             "left": [
+                "左邊那個",
                 "左邊那個人",
                 "左邊的人",
                 "左側那個人",
@@ -942,6 +910,7 @@ class QwenPromptService:
                 "left person",
             ],
             "right": [
+                "右邊那個",
                 "右邊那個人",
                 "右邊的人",
                 "右側那個人",
@@ -949,6 +918,7 @@ class QwenPromptService:
                 "right person",
             ],
             "center": [
+                "中間那個",
                 "中間那個人",
                 "中間的人",
                 "中央角色",
@@ -956,6 +926,7 @@ class QwenPromptService:
                 "center character",
             ],
             "foreground": [
+                "前景那個",
                 "前景那個人",
                 "前面那個人",
                 "前面的角色",
@@ -963,6 +934,7 @@ class QwenPromptService:
                 "front character",
             ],
             "background": [
+                "後面那個",
                 "後面那個人",
                 "背景那個人",
                 "後面的角色",
@@ -1019,44 +991,16 @@ class QwenPromptService:
     ) -> list[CharacterContinuityLock]:
         user_message = payload.user_message
         lowered = user_message.lower()
-        character_locks: list[CharacterContinuityLock] = []
+        lock_map: dict[str, CharacterContinuityLock] = {
+            lock.character_id: lock.model_copy(deep=True) for lock in base.character_locks
+        }
+        detected_changes = False
         for character in payload.selected_characters or payload.available_characters:
             name_tokens = [character.name, character.name.lower()]
             if not any(token in user_message or token in lowered for token in name_tokens):
                 continue
-            existing_lock = next(
-                (lock for lock in base.character_locks if lock.character_id == character.id),
-                None,
-            )
-            lock = CharacterContinuityLock(
-                character_id=character.id,
-                preserve_character_identity=(
-                    existing_lock.preserve_character_identity
-                    if existing_lock and existing_lock.preserve_character_identity is not None
-                    else None
-                ),
-                lock_character_appearance=(
-                    existing_lock.lock_character_appearance
-                    if existing_lock and existing_lock.lock_character_appearance is not None
-                    else None
-                ),
-                lock_character_wardrobe=(
-                    existing_lock.lock_character_wardrobe
-                    if existing_lock and existing_lock.lock_character_wardrobe is not None
-                    else None
-                ),
-                lock_character_expression=(
-                    existing_lock.lock_character_expression
-                    if existing_lock and existing_lock.lock_character_expression is not None
-                    else None
-                ),
-                lock_camera_framing=(
-                    existing_lock.lock_camera_framing
-                    if existing_lock and existing_lock.lock_camera_framing is not None
-                    else None
-                ),
-                note=existing_lock.note if existing_lock else "",
-            )
+            lock = lock_map.get(character.id, CharacterContinuityLock(character_id=character.id))
+            before = lock.model_dump()
             segment = self._extract_character_segment(user_message, character.name)
             segment_lowered = segment.lower()
             preset_name = self._detect_character_lock_preset(segment)
@@ -1135,13 +1079,83 @@ class QwenPromptService:
                 ]
             ):
                 lock.note = self._build_character_lock_note(character.name, preset_name)
-                character_locks.append(lock)
-        if not character_locks:
+                lock_map[character.id] = lock
+            if lock.model_dump() != before:
+                detected_changes = True
+        positional_changes = self._apply_positional_character_locks(payload, lock_map)
+        if not detected_changes and not positional_changes:
             return base.character_locks
-        preserved_locks = [
-            lock for lock in base.character_locks if all(lock.character_id != item.character_id for item in character_locks)
-        ]
-        return [*preserved_locks, *character_locks]
+        return list(lock_map.values())
+
+    def _apply_positional_character_locks(
+        self,
+        payload: DirectorDraftRequest,
+        lock_map: dict[str, CharacterContinuityLock],
+    ) -> bool:
+        if not payload.selected_panel or not payload.selected_panel.character_ids:
+            return False
+
+        changed = False
+        clauses = [clause.strip() for clause in re.split(r"[，,；;。.!?]", payload.user_message) if clause.strip()]
+        for clause in clauses:
+            target_ids = self._resolve_clause_character_ids(payload.selected_panel.character_ids, clause)
+            if not target_ids:
+                continue
+            for character_id in target_ids:
+                lock = lock_map.get(character_id, CharacterContinuityLock(character_id=character_id))
+                before = lock.model_dump()
+                if self._clause_requests_full_lock(clause):
+                    lock.preserve_character_identity = True
+                    lock.lock_character_appearance = True
+                    lock.lock_character_wardrobe = True
+                    lock.lock_character_expression = True
+                    lock.lock_camera_framing = True
+                    lock.note = "Director positional lock: keep unchanged."
+                if self._segment_requests_only_expression_change(clause):
+                    lock.preserve_character_identity = True
+                    lock.lock_character_appearance = True
+                    lock.lock_character_wardrobe = True
+                    lock.lock_character_expression = False
+                    lock.note = "Director positional lock: expression can change."
+                if self._segment_requests_camera_change(clause):
+                    lock.preserve_character_identity = True
+                    lock.lock_character_appearance = True
+                    lock.lock_camera_framing = False
+                    lock.note = "Director positional lock: framing can change."
+                if self._segment_requests_only_camera_hold(clause):
+                    lock.preserve_character_identity = True
+                    lock.lock_character_appearance = True
+                    lock.lock_camera_framing = True
+                    lock.note = "Director positional lock: framing stays fixed."
+                if lock.model_dump() != before:
+                    changed = True
+                    lock_map[character_id] = lock
+        return changed
+
+    def _resolve_clause_character_ids(
+        self, panel_character_ids: list[str], clause: str
+    ) -> list[str]:
+        lowered = clause.lower()
+
+        def has_any(tokens: list[str]) -> bool:
+            return any(token in clause or token in lowered for token in tokens)
+
+        if has_any(["左邊那個", "左邊那個人", "左邊的人", "左側那個人", "left-side character", "left person", "left one"]):
+            return [panel_character_ids[0]]
+        if has_any(["右邊那個", "右邊那個人", "右邊的人", "右側那個人", "right-side character", "right person", "right one"]):
+            return [panel_character_ids[-1]]
+        if has_any(["中間那個", "中間那個人", "中間的人", "中央角色", "middle character", "center character"]):
+            return [panel_character_ids[len(panel_character_ids) // 2]]
+
+        ordinal_map = {
+            0: ["第一個人", "第一個角色", "第一位", "first character", "first one"],
+            1: ["第二個人", "第二個角色", "第二位", "second character", "second one"],
+            2: ["第三個人", "第三個角色", "第三位", "third character", "third one"],
+        }
+        for index, tokens in ordinal_map.items():
+            if index < len(panel_character_ids) and has_any(tokens):
+                return [panel_character_ids[index]]
+        return []
 
     def _extract_character_segment(self, user_message: str, character_name: str) -> str:
         lowered = user_message.lower()
@@ -1172,7 +1186,20 @@ class QwenPromptService:
     def _detect_character_lock_preset(self, segment: str) -> str | None:
         lowered = segment.lower()
         presets = {
-            "full-lock": ["全鎖", "全部鎖住", "全部鎖定", "完全固定", "full lock", "lock everything"],
+            "full-lock": [
+                "全鎖",
+                "全部鎖住",
+                "全部鎖定",
+                "完全固定",
+                "保持不變",
+                "維持不變",
+                "別動",
+                "不要動",
+                "不要改",
+                "full lock",
+                "lock everything",
+                "leave alone",
+            ],
             "allow-expression": [
                 "只放開表情",
                 "只改表情",
@@ -1254,6 +1281,21 @@ class QwenPromptService:
             for token in ["鏡頭不變", "鏡頭維持一樣", "保持鏡頭", "same shot", "keep framing"]
         )
 
+    def _clause_requests_full_lock(self, clause: str) -> bool:
+        lowered = clause.lower()
+        return any(
+            token in clause or token in lowered
+            for token in [
+                "別動",
+                "不要動",
+                "保持不變",
+                "維持不變",
+                "不要改",
+                "leave alone",
+                "keep unchanged",
+            ]
+        )
+
     def _segment_requests_camera_change(self, segment: str) -> bool:
         lowered = segment.lower()
         return any(
@@ -1261,6 +1303,8 @@ class QwenPromptService:
             for token in [
                 "改鏡頭",
                 "重拉鏡頭",
+                "拉成特寫",
+                "特寫",
                 "鏡頭可以改",
                 "拉遠鏡頭",
                 "拉近鏡頭",
@@ -1278,6 +1322,8 @@ class QwenPromptService:
         camera_change_tokens = [
             "改鏡頭",
             "重拉",
+            "拉成特寫",
+            "特寫",
             "拉遠",
             "拉近",
             "構圖",
