@@ -1,4 +1,9 @@
-import type { ComicPanel, QuickRepairRecipeId, RevisionIntent } from "@archmanga/shared";
+import type {
+  ComicPanel,
+  QuickRepairRecipeId,
+  RepairTargetFrameCue,
+  RevisionIntent
+} from "@archmanga/shared";
 import { applyMaskPreset, type MaskPresetId } from "@/lib/mask-presets";
 
 export type { QuickRepairRecipeId } from "@archmanga/shared";
@@ -23,6 +28,7 @@ export interface QuickRepairRecipe {
 
 interface QuickRepairOptions {
   targetCharacterIds?: string[];
+  spatialCue?: RepairTargetFrameCue;
 }
 
 export const QUICK_REPAIR_RECIPES: Record<QuickRepairRecipeId, QuickRepairRecipe> = {
@@ -114,7 +120,8 @@ export function applyQuickRepairRecipe(
         shotType: panel.prompt.shotType,
         prompt: panel.prompt.prompt,
         targetSlots,
-        targetCount: panel.characterIds.length
+        targetCount: panel.characterIds.length,
+        spatialCue: options?.spatialCue
       })
     : panel.inpaintMask;
 

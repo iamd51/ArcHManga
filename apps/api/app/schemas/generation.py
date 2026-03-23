@@ -98,6 +98,9 @@ class DirectorDraftResponse(ApiModel):
     suggested_panel_count: int = 1
     selected_character_ids: list[str] = Field(default_factory=list)
     repair_target_character_ids: list[str] = Field(default_factory=list)
+    repair_target_frame_cue: (
+        Literal["left", "right", "center", "foreground", "background"] | None
+    ) = None
     suggested_beats: list[DirectorBeat] = Field(default_factory=list)
     panel_suggestion: DirectorPanelSuggestion | None = None
     scene_suggestion: DirectorSceneSuggestion | None = None

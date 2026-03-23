@@ -323,12 +323,13 @@ class QwenPromptService:
         system_prompt = (
             "You are an AI manga director. Return compact JSON with keys: "
             "assistant_message, continuity_hints, suggested_panel_count, selected_character_ids, "
-            "suggested_beats, panel_suggestion, scene_suggestion, quick_repair_recipe_id, repair_target_character_ids. "
+            "suggested_beats, panel_suggestion, scene_suggestion, quick_repair_recipe_id, repair_target_character_ids, repair_target_frame_cue. "
             "Each beat should contain id, title, description, shot_type, mode, focus_character_ids. "
             "panel_suggestion should contain prompt, scene_summary, shot_type, style_notes, mode, character_ids, revision_intent. "
             "revision_intent may include character_locks so different characters can keep different continuity rules. "
             "quick_repair_recipe_id should be one of expression-fix, pose-cleanup, camera-restage, lighting-polish when the request is a local repair pass. "
             "repair_target_character_ids should list the specific characters being repaired when the request names them. "
+            "repair_target_frame_cue should be one of left, right, center, foreground, background when the request points to spatial placement instead of a name. "
             "scene_suggestion should contain location, time_of_day, weather, lighting, mood, continuity_notes."
         )
         user_payload = {
@@ -430,6 +431,7 @@ class QwenPromptService:
         quick_repair_recipe_id = self._detect_quick_repair_recipe(
             payload, panel_suggestion.revision_intent
         )
+        repair_target_frame_cue = self._detect_repair_target_frame_cue(payload)
         repair_target_character_ids = self._detect_repair_target_character_ids(
             payload, quick_repair_recipe_id, panel_suggestion.revision_intent
         )
@@ -462,6 +464,8 @@ class QwenPromptService:
                 )
                 + "."
             )
+        elif repair_target_frame_cue:
+            assistant_lines.append(f"Repair frame cue: {repair_target_frame_cue}.")
         if payload.context_summary:
             assistant_lines.append(f"Working memory: {payload.context_summary}")
         if scene_suggestion.continuity_notes:
@@ -491,6 +495,8 @@ class QwenPromptService:
                 )
                 + "."
             )
+        elif repair_target_frame_cue:
+            continuity_hints.append(f"Repair focus cue: {repair_target_frame_cue}.")
 
         return DirectorDraftResponse(
             assistant_message=" ".join(assistant_lines),
@@ -498,6 +504,7 @@ class QwenPromptService:
             suggested_panel_count=panel_count,
             selected_character_ids=selected_character_ids,
             repair_target_character_ids=repair_target_character_ids,
+            repair_target_frame_cue=repair_target_frame_cue,
             suggested_beats=suggested_beats,
             panel_suggestion=panel_suggestion,
             scene_suggestion=scene_suggestion,
@@ -920,6 +927,53 @@ class QwenPromptService:
             if index < len(panel_character_ids) and has_any(tokens):
                 return [panel_character_ids[index]]
         return []
+
+    def _detect_repair_target_frame_cue(
+        self, payload: DirectorDraftRequest
+    ) -> str | None:
+        message = payload.user_message
+        lowered = message.lower()
+        cue_map = {
+            "left": [
+                "左邊那個人",
+                "左邊的人",
+                "左側那個人",
+                "left-side character",
+                "left person",
+            ],
+            "right": [
+                "右邊那個人",
+                "右邊的人",
+                "右側那個人",
+                "right-side character",
+                "right person",
+            ],
+            "center": [
+                "中間那個人",
+                "中間的人",
+                "中央角色",
+                "middle character",
+                "center character",
+            ],
+            "foreground": [
+                "前景那個人",
+                "前面那個人",
+                "前面的角色",
+                "foreground character",
+                "front character",
+            ],
+            "background": [
+                "後面那個人",
+                "背景那個人",
+                "後面的角色",
+                "background character",
+                "back character",
+            ],
+        }
+        for cue, tokens in cue_map.items():
+            if any(token in message or token in lowered for token in tokens):
+                return cue
+        return None
 
     def _revision_intent_hints(self, revision_intent: RevisionIntent) -> list[str]:
         hints: list[str] = []

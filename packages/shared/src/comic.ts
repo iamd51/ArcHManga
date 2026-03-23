@@ -8,6 +8,13 @@ export type QuickRepairRecipeId =
   | "camera-restage"
   | "lighting-polish";
 
+export type RepairTargetFrameCue =
+  | "left"
+  | "right"
+  | "center"
+  | "foreground"
+  | "background";
+
 export interface WorkflowParameter {
   key: string;
   label: string;
@@ -370,6 +377,7 @@ export interface DirectorDraftResult {
   sceneSuggestion?: DirectorSceneSuggestion;
   quickRepairRecipeId?: QuickRepairRecipeId;
   repairTargetCharacterIds?: string[];
+  repairTargetFrameCue?: RepairTargetFrameCue;
 }
 
 export interface GenerationJobState {

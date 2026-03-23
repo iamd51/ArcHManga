@@ -88,7 +88,8 @@ function resolveSuggestedMask(panel: ReturnType<typeof useSelectedPanel>, latest
     targetSlots: (latestDraft.repairTargetCharacterIds ?? [])
       .map((characterId) => panel.characterIds.findIndex((candidate) => candidate === characterId))
       .filter((slot) => slot >= 0),
-    targetCount: panel.characterIds.length
+    targetCount: panel.characterIds.length,
+    spatialCue: latestDraft.repairTargetFrameCue
   });
   if (suggestion) {
     return suggestion.mask;
@@ -260,7 +261,8 @@ export function DirectorConsole({ generationPending, onGeneratePanel }: Director
       return null;
     }
     const repaired = applyQuickRepairRecipe(baseTarget.panel, recipeId, {
-      targetCharacterIds: latestDraft.repairTargetCharacterIds
+      targetCharacterIds: latestDraft.repairTargetCharacterIds,
+      spatialCue: latestDraft.repairTargetFrameCue
     });
     return {
       ...baseTarget,
@@ -379,6 +381,7 @@ export function DirectorConsole({ generationPending, onGeneratePanel }: Director
   const repairTargetNames = (latestDraft?.repairTargetCharacterIds ?? [])
     .map((characterId) => project.characters.find((character) => character.id === characterId)?.name ?? characterId)
     .filter(Boolean);
+  const repairFrameCue = latestDraft?.repairTargetFrameCue ?? null;
   const suggestedMaskPreset = getMaskPresetById(
     selectedPanel && latestDraft?.panelSuggestion?.revisionIntent
       ? suggestMaskPreset(selectedPanel, latestDraft.panelSuggestion.revisionIntent)
@@ -513,6 +516,9 @@ export function DirectorConsole({ generationPending, onGeneratePanel }: Director
                 ) : null}
                 {repairTargetNames.length ? (
                   <span className="chip active">Repair target: {repairTargetNames.join(", ")}</span>
+                ) : null}
+                {!repairTargetNames.length && repairFrameCue ? (
+                  <span className="chip active">Repair cue: {repairFrameCue}</span>
                 ) : null}
               </div>
             ) : null}

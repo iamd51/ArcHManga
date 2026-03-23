@@ -1,4 +1,9 @@
-import type { ComicPanel, InpaintMask, RevisionIntent } from "@archmanga/shared";
+import type {
+  ComicPanel,
+  InpaintMask,
+  RepairTargetFrameCue,
+  RevisionIntent
+} from "@archmanga/shared";
 
 export type MaskPresetId =
   | "face-focus"
@@ -19,6 +24,7 @@ interface MaskPresetContext {
   prompt?: string;
   targetSlots?: number[];
   targetCount?: number;
+  spatialCue?: RepairTargetFrameCue;
 }
 
 export const MASK_PRESETS: MaskPreset[] = [
@@ -67,6 +73,7 @@ function applyContextToMask(mask: InpaintMask, context?: MaskPresetContext): Inp
   const prompt = (context.prompt ?? "").toLowerCase();
   let nextMask = { ...mask };
   let hasExplicitHorizontalCue = false;
+  let hasExplicitVerticalCue = false;
 
   if (shotType.includes("close") || shotType.includes("reaction")) {
     nextMask = {
@@ -119,6 +126,42 @@ function applyContextToMask(mask: InpaintMask, context?: MaskPresetContext): Inp
     };
   }
 
+  if (context.spatialCue === "left") {
+    hasExplicitHorizontalCue = true;
+    nextMask = {
+      ...nextMask,
+      x: clamp(0.12, 0.04, 0.76 - nextMask.width)
+    };
+  } else if (context.spatialCue === "right") {
+    hasExplicitHorizontalCue = true;
+    nextMask = {
+      ...nextMask,
+      x: clamp(0.88 - nextMask.width, 0.04, 0.76)
+    };
+  } else if (context.spatialCue === "center") {
+    hasExplicitHorizontalCue = true;
+    nextMask = {
+      ...nextMask,
+      x: clamp((1 - nextMask.width) / 2, 0.04, 0.76)
+    };
+  }
+
+  if (context.spatialCue === "foreground") {
+    hasExplicitVerticalCue = true;
+    nextMask = {
+      ...nextMask,
+      y: clamp(nextMask.y + 0.14, 0.08, 0.86 - nextMask.height),
+      height: clamp(nextMask.height + 0.08, 0.2, 0.9)
+    };
+  } else if (context.spatialCue === "background") {
+    hasExplicitVerticalCue = true;
+    nextMask = {
+      ...nextMask,
+      y: clamp(nextMask.y - 0.08, 0.04, 0.76),
+      height: clamp(nextMask.height - 0.08, 0.18, 0.84)
+    };
+  }
+
   if (
     !hasExplicitHorizontalCue &&
     context.targetSlots?.length &&
@@ -134,6 +177,24 @@ function applyContextToMask(mask: InpaintMask, context?: MaskPresetContext): Inp
         x: clamp(0.08 + horizontalRatio * (0.84 - nextMask.width), 0.04, 0.96 - nextMask.width)
       };
     }
+  }
+
+  if (
+    !hasExplicitVerticalCue &&
+    (prompt.includes("前景") || prompt.includes("前面") || prompt.includes("foreground"))
+  ) {
+    nextMask = {
+      ...nextMask,
+      y: clamp(nextMask.y + 0.12, 0.08, 0.86 - nextMask.height)
+    };
+  } else if (
+    !hasExplicitVerticalCue &&
+    (prompt.includes("後面") || prompt.includes("背景") || prompt.includes("background"))
+  ) {
+    nextMask = {
+      ...nextMask,
+      y: clamp(nextMask.y - 0.08, 0.04, 0.76)
+    };
   }
 
   return nextMask;
